@@ -1,0 +1,32 @@
+<div class="mp-picker-container">
+  <div class="mp-picker-header">
+    <input type="text" class="mp-picker-search" placeholder="{{searchPlaceholder}}">
+    <button class="mp-picker-add-file" title="{{addSoundLabel}}">
+      <i class="fas fa-file-audio"></i>
+    </button>
+    <button class="mp-picker-import-folder" title="{{importFolderLabel}}">
+      <i class="fas fa-folder-open"></i>
+    </button>
+  </div>
+  
+  <div class="mp-picker-list">
+    {{#each playlists}}
+    <div class="mp-picker-playlist">
+      <div class="mp-picker-playlist-name">📁 {{name}}</div>
+      {{#each sounds}}
+      <div class="mp-picker-sound {{#if playing}}playing{{/if}}" data-sound-id="{{id}}" data-playlist-id="{{../id}}">
+        <i class="fas fa-music"></i>
+        <span>{{name}}</span>
+        {{#if playing}}
+        <i class="fas fa-volume-up" style="margin-left: auto;"></i>
+        {{/if}}
+      </div>
+      {{/each}}
+    </div>
+    {{/each}}
+    
+    {{#unless playlists.length}}
+    <div class="mp-picker-empty">{{noPlaylistMsg}}</div>
+    {{/unless}}
+  </div>
+</div>

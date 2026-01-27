@@ -1,0 +1,25 @@
+{
+  "SOUNDS_PLAYER": {
+    "empty": "Vide",
+    "selectSlot": "Sélectionnez un slot",
+    "changeImage": "Changer l'image",
+    "removeImage": "Supprimer l'image",
+    "removeSound": "Supprimer le son",
+    "playlistDeleted": "Playlist supprimée",
+    "playlistCreated": "Playlist créée",
+    "selectSound": "Sélectionner un son",
+    "addSound": "Ajouter un son",
+    "importFolder": "Importer un dossier",
+    "search": "Rechercher...",
+    "noPlaylist": "Aucune playlist trouvée.",
+    "playlistName": "Nom de la playlist",
+    "newPlaylist": "Nouvelle playlist",
+    "create": "Créer",
+    "cancel": "Annuler",
+    "deletePlaylist": "Supprimer la playlist",
+    "editPlaylist": "Éditer la playlist",
+    "confirmDelete": "Supprimer cette playlist ?",
+    "importedSounds": "sons importés",
+    "playlists": "Playlists"
+  }
+}

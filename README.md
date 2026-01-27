@@ -2,8 +2,7 @@
 
 A powerful multi-slot sound player for Foundry VTT that brings a modern music player experience to your tabletop sessions.
 
-![Main Interface](<img width="646" height="547" alt="image" src="https://github.com/user-attachments/assets/49b896bc-372f-4063-91bb-dd34aa445fdf" />
-)
+![Main Interface](screenshots/main-interface.png)
 
 ## Why The Sounds Player?
 
@@ -12,32 +11,27 @@ Foundry VTT's default playlist system lacks essential features for smooth audio 
 ### 🎵 **Full Timeline Navigation**
 Unlike Foundry's default player, you can **seek anywhere in your tracks**. Click on the timeline to jump to any position - no more waiting for a track to finish or restarting from the beginning.
 
-![Timeline Navigation](<img width="438" height="79" alt="image" src="https://github.com/user-attachments/assets/cc07a28b-7f6c-42e9-97c5-de2249cff57d" />
-)
+![Timeline Navigation](screenshots/timeline.png)
 
 ### 🎨 **Visual Slot System with Custom Images**
 Assign custom images to each sound slot for instant visual recognition. Perfect for distinguishing between combat themes, ambient sounds, and NPC themes at a glance.
 
-![Custom Images](<img width="203" height="132" alt="image" src="https://github.com/user-attachments/assets/e3d7666c-6958-476c-bb82-ac99ae890e20" />
-)
+![Custom Images](screenshots/custom-images.png)
 
 ### 🔀 **Drag & Drop Reordering**
 Organize your sounds exactly how you want them. Simply drag and drop slots to reorder your playlist on the fly during sessions.
 
-![Drag and Drop](<img width="231" height="198" alt="image" src="https://github.com/user-attachments/assets/49f0acd8-2858-4768-a618-72af4f9c023f" />
-)
+![Drag and Drop](screenshots/drag-drop.png)
 
 ### 📁 **Bulk Import**
 Import entire folders of audio files in one click. No more adding sounds one by one - select a folder and all audio files are added instantly.
 
-![Bulk Import]( <img width="392" height="490" alt="image" src="https://github.com/user-attachments/assets/b95bd2e5-1987-4cc3-88e2-7d71431d1afc" />
-)
+![Bulk Import](screenshots/bulk-import.png)
 
 ### 🎛️ **Multi-Playlist Management**
 Switch between playlists without stopping playback. Each playlist maintains its own state - music keeps playing even when you browse other playlists.
 
-![Playlist Sidebar](<img width="170" height="216" alt="image" src="https://github.com/user-attachments/assets/c82f394b-5379-4ded-8bff-9a5cd40ff3c7" />
-)
+![Playlist Sidebar](screenshots/playlist-sidebar.png)
 
 ## How to Access
 
@@ -46,6 +40,18 @@ Switch between playlists without stopping playback. Each playlist maintains its 
 
 ![Access](screenshots/access.png)
 
+## Features
+
+| Feature | The Sounds Player | Foundry Default |
+|---------|-------------------|-----------------|
+| Timeline seek | ✅ | ❌ |
+| Custom slot images | ✅ | ❌ |
+| Drag & drop reorder | ✅ | ❌ |
+| Bulk folder import | ✅ | ❌ |
+| Visual slot grid | ✅ | ❌ |
+| Multi-playlist playback | ✅ | ❌ |
+| Loop toggle | ✅ | ✅ |
+| Volume control | ✅ | ✅ |
 
 ## Usage
 
@@ -97,6 +103,10 @@ https://github.com/YOUR_USERNAME/sounds-player/releases/latest/download/module.j
 
 - **Foundry VTT**: v13+
 - **Systems**: All systems
+
+## Support
+
+Found a bug or have a feature request? [Open an issue](https://github.com/YOUR_USERNAME/sounds-player/issues) on GitHub.
 
 ## License
 

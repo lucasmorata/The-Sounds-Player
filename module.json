@@ -1,0 +1,41 @@
+{
+  "id": "sounds-player",
+  "title": "The Sounds Player",
+  "description": "A powerful multi-slot sound player with timeline navigation, custom images, drag & drop reordering, and bulk import. Everything Foundry's default playlist should have been.",
+  "version": "2.0.0",
+  "compatibility": {
+    "minimum": "13",
+    "verified": "13"
+  },
+  "authors": [
+    {
+      "name": "Lucas Morata",
+      "url": "https://lucasmorata.fr"
+    }
+  ],
+  "url": "https://github.com/YOUR_USERNAME/sounds-player",
+  "manifest": "https://github.com/YOUR_USERNAME/sounds-player/releases/latest/download/module.json",
+  "download": "https://github.com/YOUR_USERNAME/sounds-player/releases/latest/download/sounds-player.zip",
+  "readme": "https://github.com/YOUR_USERNAME/sounds-player#readme",
+  "changelog": "https://github.com/YOUR_USERNAME/sounds-player/blob/main/CHANGELOG.md",
+  "bugs": "https://github.com/YOUR_USERNAME/sounds-player/issues",
+  "license": "MIT",
+  "esmodules": [
+    "scripts/main.js"
+  ],
+  "styles": [
+    "styles/player.css"
+  ],
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json"
+    },
+    {
+      "lang": "fr",
+      "name": "Français",
+      "path": "lang/fr.json"
+    }
+  ]
+}
