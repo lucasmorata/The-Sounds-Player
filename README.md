@@ -54,10 +54,10 @@ Switch between playlists without stopping playback. Each playlist maintains its 
 | Timeline seek | ✅ | ❌ |
 | Custom slot images | ✅ | ❌ |
 | Drag & drop reorder | ✅ | ❌ |
-| Bulk folder import | ✅ | ✅ |
+| Bulk folder import | ✅++ | ✅ |
 | Visual slot grid | ✅ | ❌ |
-| Multi-playlist playback | ✅ | ✅ |
-| Loop toggle | ✅ | ✅ |
+| Multi-playlist playback | ✅++ | ✅ |
+| Loop toggle | ✅++ | ✅ |
 | Volume control | ✅ | ✅ |
 
 ## Usage
