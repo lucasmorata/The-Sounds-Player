@@ -56,7 +56,7 @@ Switch between playlists without stopping playback. Each playlist maintains its 
 | Drag & drop reorder | ✅ | ❌ |
 | Bulk folder import | ✅ | ✅ |
 | Visual slot grid | ✅ | ❌ |
-| Multi-playlist playback | ✅ | ❌ |
+| Multi-playlist playback | ✅ | ✅ |
 | Loop toggle | ✅ | ✅ |
 | Volume control | ✅ | ✅ |
 
