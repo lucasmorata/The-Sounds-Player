@@ -96,10 +96,7 @@ Switch between playlists without stopping playback. Each playlist maintains its 
 ### Method 1: Manifest URL
 1. In Foundry VTT, go to **Add-on Modules**
 2. Click **Install Module**
-3. Paste the manifest URL:
-```
-https://github.com/YOUR_USERNAME/sounds-player/releases/latest/download/module.json
-```
+3. Paste the manifest URL
 
 ### Method 2: Manual Installation
 1. Download the latest release
@@ -110,10 +107,6 @@ https://github.com/YOUR_USERNAME/sounds-player/releases/latest/download/module.j
 
 - **Foundry VTT**: v13+
 - **Systems**: All systems
-
-## Support
-
-Found a bug or have a feature request? [Open an issue](https://github.com/YOUR_USERNAME/sounds-player/issues) on GitHub.
 
 ## License
 
