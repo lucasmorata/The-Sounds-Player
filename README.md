@@ -28,16 +28,9 @@ Organize your sounds exactly how you want them. Simply drag and drop slots to re
 
 
 ### 📁 **Bulk Import**
-Import entire folders of audio files in one click. No more adding sounds one by one - select a folder and all audio files are added instantly.
+Import entire folders of audio files into a new interface.
 
 <img width="392" height="490" alt="Capture d&#39;écran 2026-01-27 222003" src="https://github.com/user-attachments/assets/f34567b2-60c3-4b6f-89c6-0e00db63a5ac" />
-
-
-### 🎛️ **Multi-Playlist Management**
-Switch between playlists without stopping playback. Each playlist maintains its own state - music keeps playing even when you browse other playlists.
-
-<img width="170" height="216" alt="Capture d&#39;écran 2026-01-27 222034" src="https://github.com/user-attachments/assets/6c1aa0f5-bd92-4fc8-9040-49e924f3cffe" />
-
 
 ## How to Access
 
@@ -56,7 +49,6 @@ Switch between playlists without stopping playback. Each playlist maintains its 
 | Drag & drop reorder | ✅ | ❌ |
 | Bulk folder import | ✅++ | ✅ |
 | Visual slot grid | ✅ | ❌ |
-| Multi-playlist playback | ✅++ | ✅ |
 | Loop toggle | ✅++ | ✅ |
 | Volume control | ✅ | ✅ |
 
