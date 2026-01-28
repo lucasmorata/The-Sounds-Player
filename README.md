@@ -10,7 +10,7 @@ A powerful multi-slot sound player for Foundry VTT that brings a modern music pl
 Foundry VTT's default playlist system lacks essential features for smooth audio management during sessions. **The Sounds Player** fills this gap with:
 
 ### 🎵 **Full Timeline Navigation**
-Unlike Foundry's default player, you can **seek anywhere in your tracks**. Click on the timeline to jump to any position - no more waiting for a track to finish or restarting from the beginning.
+Ergonomic seeking for audio playback. Click on the timeline to jump to any position - no more waiting for a track to finish or restarting from the beginning.
 
 <img width="438" height="79" alt="Capture d&#39;écran 2026-01-27 221822" src="https://github.com/user-attachments/assets/8916d27b-bb20-411d-98b6-4536fe09ab7c" />
 
