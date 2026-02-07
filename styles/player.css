@@ -72,7 +72,7 @@
 .mp-playlist-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding: 8px 10px;
   cursor: pointer;
   border-left: 3px solid transparent;
@@ -88,8 +88,7 @@
   border-left-color: #4a9eff;
 }
 
-.mp-playlist-item.playing .mp-playlist-icon {
-  color: #4aff6a;
+.mp-playlist-item.playing .mp-playlist-emoji {
   animation: pulse-icon 1s ease-in-out infinite;
 }
 
@@ -98,13 +97,11 @@
   50% { transform: scale(1.2); }
 }
 
-.mp-playlist-icon {
-  font-size: 12px;
-  color: #666;
-}
-
-.mp-playlist-item.selected .mp-playlist-icon {
-  color: #4a9eff;
+.mp-playlist-emoji {
+  font-size: 14px;
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
 }
 
 .mp-playlist-name {
@@ -125,6 +122,74 @@
   font-size: 10px;
   color: #4aff6a;
   animation: pulse-icon 1s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+/* Playlist volume toggle button */
+.mp-playlist-vol-toggle {
+  background: none;
+  border: none;
+  color: #555;
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 9px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.mp-playlist-item:hover .mp-playlist-vol-toggle,
+.mp-playlist-vol-toggle:focus {
+  opacity: 1;
+}
+
+.mp-playlist-vol-toggle:hover {
+  color: #4a9eff;
+  background: #333;
+}
+
+/* Playlist volume row (collapsed by default) */
+.mp-playlist-volume-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 14px 6px 14px;
+  background: #1a1a1a;
+  border-left: 3px solid #333;
+}
+
+.mp-pl-vol-icon {
+  font-size: 9px;
+  color: #666;
+}
+
+.mp-playlist-volume-slider {
+  flex: 1;
+  height: 3px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: #3a3a3a;
+  border-radius: 2px;
+  outline: none;
+}
+
+.mp-playlist-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px;
+  height: 10px;
+  background: #4a9eff;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.mp-playlist-volume-slider::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  background: #4a9eff;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
 }
 
 .mp-no-playlists {
@@ -192,6 +257,29 @@
 @keyframes bar-dance {
   from { height: 4px; }
   to { height: 14px; }
+}
+
+/* Empty state (no playlist selected) */
+.mp-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 120px;
+  color: #555;
+  gap: 12px;
+}
+
+.mp-empty-state .mp-empty-icon {
+  font-size: 32px;
+  opacity: 0.3;
+}
+
+.mp-empty-state p {
+  font-size: 12px;
+  margin: 0;
 }
 
 /* Slots container */
@@ -612,3 +700,11 @@
 .mp-context-menu-item i { width: 16px; text-align: center; opacity: 0.7; }
 .mp-context-menu-item.danger { color: #ff6b6b; }
 .mp-context-menu-item.danger:hover { background: #3a2a2a; }
+
+.mp-context-menu-header {
+  padding: 4px 14px;
+  font-size: 10px;
+  color: #888;
+  text-transform: uppercase;
+  font-weight: bold;
+}
