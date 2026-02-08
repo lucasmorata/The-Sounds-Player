@@ -377,60 +377,51 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
   // =============================================
   // SEEK HELPERS
-  // Uses Foundry Sound API directly - no property enumeration.
-  // Foundry v13 Sound: sound.container is an AudioContainer,
-  // sound.container.element is the HTMLAudioElement.
-  // Getters like currentTime/duration are on the prototype
-  // so Object.keys() cannot see them - use direct access only.
   // =============================================
 
-  _getAudioElement(playlistSound) {
-    if (!playlistSound?.sound) return null;
+  // One-time diagnostic: log the Sound structure to console
+  // so we can see exactly how Foundry v13 stores audio
+  _debugSoundOnce(playlistSound) {
+    if (this._debugDone || !playlistSound?.sound) return;
+    this._debugDone = true;
     const s = playlistSound.sound;
-
-    // Foundry v13: Sound.container.element (AudioContainer wraps HTMLAudioElement)
-    try { if (s.container?.element instanceof HTMLMediaElement) return s.container.element; } catch {}
-    try { if (s.container?._element instanceof HTMLMediaElement) return s.container._element; } catch {}
-    try { if (s.container instanceof HTMLMediaElement) return s.container; } catch {}
-
-    // Direct element on Sound
-    try { if (s.element instanceof HTMLMediaElement) return s.element; } catch {}
-    try { if (s._element instanceof HTMLMediaElement) return s._element; } catch {}
-
-    // MediaElementSource path
-    try { if (s.sourceNode?.mediaElement instanceof HTMLMediaElement) return s.sourceNode.mediaElement; } catch {}
-    try { if (s.node?.mediaElement instanceof HTMLMediaElement) return s.node.mediaElement; } catch {}
-    try { if (s.node instanceof HTMLMediaElement) return s.node; } catch {}
-
-    return null;
+    console.log("Sounds Player | DEBUG Sound object:", s);
+    console.log("Sounds Player | DEBUG Sound constructor:", s.constructor?.name);
+    console.log("Sounds Player | DEBUG Sound prototype chain:",
+      Object.getOwnPropertyNames(Object.getPrototypeOf(s)));
+    console.log("Sounds Player | DEBUG Sound own keys:", Object.getOwnPropertyNames(s));
+    if (s.container) {
+      console.log("Sounds Player | DEBUG container:", s.container);
+      console.log("Sounds Player | DEBUG container constructor:", s.container?.constructor?.name);
+      console.log("Sounds Player | DEBUG container own keys:",
+        Object.getOwnPropertyNames(s.container));
+    }
+    // Walk entire prototype chain looking for currentTime setter
+    let proto = s;
+    while (proto) {
+      const desc = Object.getOwnPropertyDescriptor(proto, "currentTime");
+      if (desc) {
+        console.log("Sounds Player | DEBUG currentTime descriptor on", proto.constructor?.name, desc);
+      }
+      proto = Object.getPrototypeOf(proto);
+    }
   }
 
   _getCurrentTime(playlistSound) {
     if (!playlistSound?.sound) return 0;
     try {
-      const s = playlistSound.sound;
-      // Foundry Sound API getter (works even though it's on the prototype)
-      const t = s.currentTime;
+      const t = playlistSound.sound.currentTime;
       if (typeof t === "number" && isFinite(t)) return t;
-    } catch { /* ignore */ }
-    try {
-      const el = this._getAudioElement(playlistSound);
-      if (el && isFinite(el.currentTime)) return el.currentTime;
-    } catch { /* ignore */ }
+    } catch {}
     return 0;
   }
 
   _getDuration(playlistSound) {
     if (!playlistSound?.sound) return 0;
     try {
-      const s = playlistSound.sound;
-      const d = s.duration;
+      const d = playlistSound.sound.duration;
       if (typeof d === "number" && isFinite(d) && d > 0) return d;
-    } catch { /* ignore */ }
-    try {
-      const el = this._getAudioElement(playlistSound);
-      if (el && isFinite(el.duration) && el.duration > 0) return el.duration;
-    } catch { /* ignore */ }
+    } catch {}
     return 0;
   }
 
@@ -438,50 +429,63 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const playlistSound = this._getFocusedSound();
     if (!playlistSound?.sound) return;
 
+    // Log sound structure once for debugging
+    this._debugSoundOnce(playlistSound);
+
     const duration = this._getDuration(playlistSound);
     if (!duration || !isFinite(duration)) return;
 
     const seekTime = Math.max(0, Math.min(percent * duration, duration - 0.1));
     const s = playlistSound.sound;
 
-    // Method 1: Foundry Sound currentTime setter (prototype getter/setter)
+    // Method 1: Try setting currentTime directly (catches error if read-only)
+    try { s.currentTime = seekTime; return; } catch {}
+
+    // Method 2: Walk prototype chain for currentTime setter
     try {
-      const desc = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(s), "currentTime")
-                || Object.getOwnPropertyDescriptor(s, "currentTime");
-      if (desc?.set) {
-        s.currentTime = seekTime;
-        return;
+      let proto = Object.getPrototypeOf(s);
+      while (proto) {
+        const desc = Object.getOwnPropertyDescriptor(proto, "currentTime");
+        if (desc?.set) { desc.set.call(s, seekTime); return; }
+        proto = Object.getPrototypeOf(proto);
       }
     } catch {}
 
-    // Method 2: HTMLAudioElement direct
-    try {
-      const el = this._getAudioElement(playlistSound);
-      if (el) {
-        el.currentTime = seekTime;
-        return;
-      }
-    } catch {}
+    // Method 3: container.currentTime
+    try { if (s.container) { s.container.currentTime = seekTime; return; } } catch {}
 
-    // Method 3: container.currentTime setter
-    try {
-      if (s.container && typeof s.container.currentTime !== "undefined") {
-        s.container.currentTime = seekTime;
-        return;
-      }
-    } catch {}
+    // Method 4: Brute force - find any HTMLMediaElement on the object or container
+    for (const obj of [s, s.container]) {
+      if (!obj) continue;
+      try {
+        for (const key of Object.getOwnPropertyNames(obj)) {
+          try {
+            if (obj[key] instanceof HTMLMediaElement) {
+              obj[key].currentTime = seekTime;
+              return;
+            }
+          } catch {}
+        }
+      } catch {}
+    }
 
-    // Method 4: Stop and replay with offset (AudioBuffer fallback)
+    // Method 5: Sound.stop() + Sound.play() with offset
     try {
-      if (s.playing) {
-        const vol = s.volume;
-        const loop = s.loop;
+      if (s.playing !== false) {
         s.stop();
-        s.play({ offset: seekTime, volume: vol, loop: loop });
+        s.play({ offset: seekTime });
         return;
       }
+    } catch {}
+
+    // Method 6: Foundry document API - guaranteed to work but causes brief interruption
+    try {
+      this._manualStops.add(playlistSound.id);
+      playlistSound.update({ playing: false }).then(() => {
+        playlistSound.update({ playing: true, pausedTime: seekTime });
+      });
     } catch (e) {
-      console.warn("Sounds Player | Seek failed:", e);
+      console.warn("Sounds Player | All seek methods failed:", e);
     }
   }
 
