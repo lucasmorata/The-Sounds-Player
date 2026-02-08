@@ -378,10 +378,11 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
   // =============================================
   // SEEK HELPERS
   // In Foundry v13, Sound and AudioContainer are MERGED.
-  // Sound#container is deprecated (returns this).
-  // The Sound has a currentTime getter/setter on prototype,
-  // but the setter does NOT actually seek the audio.
-  // We must use stop() + play({ offset }) to seek.
+  // Sound.stop() corrupts the Sound state (duration/currentTime = 0).
+  // Sound.currentTime setter doesn't actually seek.
+  // The only reliable way is the Foundry document API:
+  //   update({ playing: false }) then update({ playing: true, pausedTime })
+  // We only seek on mouseup to avoid spamming the server during drag.
   // =============================================
 
   _getCurrentTime(playlistSound) {
@@ -402,36 +403,22 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
     return 0;
   }
 
-  _seekToPercent(percent) {
+  // Actually perform the seek via Foundry document API.
+  // Called only on mouseup after drag, or on single click.
+  async _doSeek(percent) {
     const playlistSound = this._getFocusedSound();
-    if (!playlistSound?.sound) return;
+    if (!playlistSound) return;
 
     const duration = this._getDuration(playlistSound);
     if (!duration || !isFinite(duration)) return;
 
-    const seekTime = Math.max(0, Math.min(percent * duration, duration - 0.1));
-    const s = playlistSound.sound;
+    const seekTime = Math.max(0, Math.min(percent * duration, duration - 0.5));
 
-    // Foundry v13: Sound.currentTime setter exists but doesn't
-    // actually seek. The only way to seek is stop + play with offset.
-    try {
-      if (s.playing) {
-        const vol = s.volume;
-        const loop = s.loop;
-        s.stop();
-        s.play({ offset: seekTime, volume: vol, loop: loop });
-        return;
-      }
-    } catch (e) {
-      console.warn("Sounds Player | Sound.stop/play seek failed:", e);
-    }
-
-    // Fallback: Foundry document API (network round-trip, small interruption)
+    // Use Foundry document API: stop then restart at position
     try {
       this._manualStops.add(playlistSound.id);
-      playlistSound.update({ playing: false }).then(() => {
-        playlistSound.update({ playing: true, pausedTime: seekTime });
-      });
+      await playlistSound.update({ playing: false });
+      await playlistSound.update({ playing: true, pausedTime: seekTime });
     } catch (e) {
       console.warn("Sounds Player | Seek failed:", e);
     }
@@ -609,37 +596,47 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
     el.querySelector(".mp-btn-backward")?.addEventListener("click", () => this._onPrevTrack());
     el.querySelector(".mp-btn-forward")?.addEventListener("click", () => this._onNextTrack());
 
-    // Timeline seek - robust drag handling
+    // Timeline seek:
+    // - During drag: only update the visual progress bar (no audio change)
+    // - On mouseup: perform actual seek via Foundry document API
     const timeline = el.querySelector(".mp-timeline");
     if (timeline) {
       let dragging = false;
-      const handleSeek = (e) => {
-        const rect = timeline.getBoundingClientRect();
-        const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-        this._seekToPercent(percent);
+      let seekPercent = 0;
 
-        // Also update the progress bar visually immediately for responsiveness
+      const updateVisual = (e) => {
+        const rect = timeline.getBoundingClientRect();
+        seekPercent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
         const progress = el.querySelector(".mp-timeline-progress");
-        if (progress) progress.style.width = (percent * 100) + "%";
+        if (progress) progress.style.width = (seekPercent * 100) + "%";
+
+        // Update time display during drag
+        const focusedSound = this._getFocusedSound();
+        const duration = this._getDuration(focusedSound);
+        const timeCurrent = el.querySelector(".mp-time-current");
+        if (timeCurrent && duration) {
+          timeCurrent.textContent = this._formatTime(seekPercent * duration);
+        }
       };
 
       timeline.addEventListener("mousedown", (e) => {
-        e.preventDefault(); // prevent text selection
+        e.preventDefault();
         dragging = true;
         this._seeking = true;
-        handleSeek(e);
+        updateVisual(e);
       });
 
       window.addEventListener("mousemove", (e) => {
         if (!dragging) return;
         e.preventDefault();
-        handleSeek(e);
+        updateVisual(e);
       });
 
       window.addEventListener("mouseup", () => {
         if (dragging) {
           dragging = false;
           this._seeking = false;
+          this._doSeek(seekPercent);
         }
       });
     }
