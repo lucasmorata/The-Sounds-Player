@@ -5,6 +5,7 @@
     "changeImage": "Changer l'image",
     "removeImage": "Supprimer l'image",
     "removeSound": "Supprimer le son",
+    "editSound": "Éditer le son",
     "playlistDeleted": "Playlist supprimée",
     "playlistCreated": "Playlist créée",
     "selectSound": "Sélectionner un son",
@@ -20,6 +21,12 @@
     "editPlaylist": "Éditer la playlist",
     "confirmDelete": "Supprimer cette playlist ?",
     "importedSounds": "sons importés",
-    "playlists": "Playlists"
+    "playlists": "Playlists",
+    "selectPlaylist": "Sélectionnez une playlist pour commencer",
+    "changeCategory": "Catégorie",
+    "categoryMusic": "Musique",
+    "categoryEnvironment": "Environnement",
+    "categoryInterface": "Interface",
+    "volume": "Volume"
   }
 }

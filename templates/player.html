@@ -10,12 +10,21 @@
     <div class="mp-playlist-list">
       {{#each playlistItems}}
       <div class="mp-playlist-item {{#if selected}}selected{{/if}} {{#if playing}}playing{{/if}}" data-playlist-id="{{id}}">
-        <i class="fas fa-music mp-playlist-icon"></i>
+        <span class="mp-playlist-emoji">{{emoji}}</span>
         <span class="mp-playlist-name">{{name}}</span>
         {{#if playing}}
         <i class="fas fa-volume-up mp-playing-icon"></i>
         {{/if}}
+        <button class="mp-playlist-vol-toggle" data-playlist-id="{{id}}" title="Volume">
+          <i class="fas fa-sliders-h"></i>
+        </button>
       </div>
+      {{#if volumeExpanded}}
+      <div class="mp-playlist-volume-row">
+        <i class="fas fa-volume-down mp-pl-vol-icon"></i>
+        <input type="range" class="mp-playlist-volume-slider" data-playlist-id="{{id}}" min="0" max="1" step="0.01" value="{{volume}}">
+      </div>
+      {{/if}}
       {{/each}}
       {{#unless playlistItems.length}}
       <div class="mp-no-playlists">No playlists</div>
@@ -39,27 +48,34 @@
 
     <!-- Slots -->
     <div class="mp-slots-container">
-      {{#each slots}}
-      <div class="mp-slot has-sound {{#if playing}}playing{{/if}} {{#if active}}active{{/if}}" data-slot="{{index}}">
-        {{#if image}}
-        <img class="mp-slot-image" src="{{image}}" alt="">
-        <div class="mp-slot-icon" style="display:none;">🎵</div>
-        {{else}}
-        <div class="mp-slot-icon">🎵</div>
-        {{/if}}
-        <div class="mp-slot-name">{{name}}</div>
-        <div class="mp-bars">
-          <div class="mp-bar"></div>
-          <div class="mp-bar"></div>
-          <div class="mp-bar"></div>
-          <div class="mp-bar"></div>
+      {{#if hasPlaylist}}
+        {{#each slots}}
+        <div class="mp-slot has-sound {{#if playing}}playing{{/if}} {{#if active}}active{{/if}}" data-slot="{{index}}" data-sound-id="{{id}}">
+          {{#if image}}
+          <img class="mp-slot-image" src="{{image}}" alt="">
+          <div class="mp-slot-icon" style="display:none;">🎵</div>
+          {{else}}
+          <div class="mp-slot-icon">🎵</div>
+          {{/if}}
+          <div class="mp-slot-name">{{name}}</div>
+          <div class="mp-bars">
+            <div class="mp-bar"></div>
+            <div class="mp-bar"></div>
+            <div class="mp-bar"></div>
+            <div class="mp-bar"></div>
+          </div>
         </div>
-      </div>
-      {{/each}}
-      
-      <div class="mp-slot mp-slot-add" data-slot="{{slots.length}}">
-        <div class="mp-slot-icon">➕</div>
-      </div>
+        {{/each}}
+
+        <div class="mp-slot mp-slot-add">
+          <div class="mp-slot-icon">➕</div>
+        </div>
+      {{else}}
+        <div class="mp-empty-state">
+          <i class="fas fa-music mp-empty-icon"></i>
+          <p>{{selectPlaylistLabel}}</p>
+        </div>
+      {{/if}}
     </div>
 
     <!-- Player controls -->
