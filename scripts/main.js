@@ -377,35 +377,12 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
   // =============================================
   // SEEK HELPERS
+  // In Foundry v13, Sound and AudioContainer are MERGED.
+  // Sound#container is deprecated (returns this).
+  // The Sound has a currentTime getter/setter on prototype,
+  // but the setter does NOT actually seek the audio.
+  // We must use stop() + play({ offset }) to seek.
   // =============================================
-
-  // One-time diagnostic: log the Sound structure to console
-  // so we can see exactly how Foundry v13 stores audio
-  _debugSoundOnce(playlistSound) {
-    if (this._debugDone || !playlistSound?.sound) return;
-    this._debugDone = true;
-    const s = playlistSound.sound;
-    console.log("Sounds Player | DEBUG Sound object:", s);
-    console.log("Sounds Player | DEBUG Sound constructor:", s.constructor?.name);
-    console.log("Sounds Player | DEBUG Sound prototype chain:",
-      Object.getOwnPropertyNames(Object.getPrototypeOf(s)));
-    console.log("Sounds Player | DEBUG Sound own keys:", Object.getOwnPropertyNames(s));
-    if (s.container) {
-      console.log("Sounds Player | DEBUG container:", s.container);
-      console.log("Sounds Player | DEBUG container constructor:", s.container?.constructor?.name);
-      console.log("Sounds Player | DEBUG container own keys:",
-        Object.getOwnPropertyNames(s.container));
-    }
-    // Walk entire prototype chain looking for currentTime setter
-    let proto = s;
-    while (proto) {
-      const desc = Object.getOwnPropertyDescriptor(proto, "currentTime");
-      if (desc) {
-        console.log("Sounds Player | DEBUG currentTime descriptor on", proto.constructor?.name, desc);
-      }
-      proto = Object.getPrototypeOf(proto);
-    }
-  }
 
   _getCurrentTime(playlistSound) {
     if (!playlistSound?.sound) return 0;
@@ -429,63 +406,34 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const playlistSound = this._getFocusedSound();
     if (!playlistSound?.sound) return;
 
-    // Log sound structure once for debugging
-    this._debugSoundOnce(playlistSound);
-
     const duration = this._getDuration(playlistSound);
     if (!duration || !isFinite(duration)) return;
 
     const seekTime = Math.max(0, Math.min(percent * duration, duration - 0.1));
     const s = playlistSound.sound;
 
-    // Method 1: Try setting currentTime directly (catches error if read-only)
-    try { s.currentTime = seekTime; return; } catch {}
-
-    // Method 2: Walk prototype chain for currentTime setter
+    // Foundry v13: Sound.currentTime setter exists but doesn't
+    // actually seek. The only way to seek is stop + play with offset.
     try {
-      let proto = Object.getPrototypeOf(s);
-      while (proto) {
-        const desc = Object.getOwnPropertyDescriptor(proto, "currentTime");
-        if (desc?.set) { desc.set.call(s, seekTime); return; }
-        proto = Object.getPrototypeOf(proto);
-      }
-    } catch {}
-
-    // Method 3: container.currentTime
-    try { if (s.container) { s.container.currentTime = seekTime; return; } } catch {}
-
-    // Method 4: Brute force - find any HTMLMediaElement on the object or container
-    for (const obj of [s, s.container]) {
-      if (!obj) continue;
-      try {
-        for (const key of Object.getOwnPropertyNames(obj)) {
-          try {
-            if (obj[key] instanceof HTMLMediaElement) {
-              obj[key].currentTime = seekTime;
-              return;
-            }
-          } catch {}
-        }
-      } catch {}
-    }
-
-    // Method 5: Sound.stop() + Sound.play() with offset
-    try {
-      if (s.playing !== false) {
+      if (s.playing) {
+        const vol = s.volume;
+        const loop = s.loop;
         s.stop();
-        s.play({ offset: seekTime });
+        s.play({ offset: seekTime, volume: vol, loop: loop });
         return;
       }
-    } catch {}
+    } catch (e) {
+      console.warn("Sounds Player | Sound.stop/play seek failed:", e);
+    }
 
-    // Method 6: Foundry document API - guaranteed to work but causes brief interruption
+    // Fallback: Foundry document API (network round-trip, small interruption)
     try {
       this._manualStops.add(playlistSound.id);
       playlistSound.update({ playing: false }).then(() => {
         playlistSound.update({ playing: true, pausedTime: seekTime });
       });
     } catch (e) {
-      console.warn("Sounds Player | All seek methods failed:", e);
+      console.warn("Sounds Player | Seek failed:", e);
     }
   }
 
