@@ -378,24 +378,59 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
   // =============================================
   // SEEK HELPERS
   // =============================================
+
+  // Discover the HTMLMediaElement from a Foundry Sound object.
+  // Foundry v13 may store it under various property names including
+  // private ones (_element, _source, etc). We search broadly.
   _getAudioElement(playlistSound) {
     if (!playlistSound?.sound) return null;
     const s = playlistSound.sound;
-    // Try multiple access paths for the underlying HTMLMediaElement
-    if (s.element) return s.element;
-    if (s.sourceNode?.mediaElement) return s.sourceNode.mediaElement;
-    if (s.node?.mediaElement) return s.node.mediaElement;
-    if (s.container?.mediaElement) return s.container.mediaElement;
+
+    // 1. Direct public properties
+    if (s.element instanceof HTMLMediaElement) return s.element;
+    if (s.container instanceof HTMLMediaElement) return s.container;
+    if (s.node instanceof HTMLMediaElement) return s.node;
+
+    // 2. Nested mediaElement
+    if (s.sourceNode?.mediaElement instanceof HTMLMediaElement) return s.sourceNode.mediaElement;
+    if (s.node?.mediaElement instanceof HTMLMediaElement) return s.node.mediaElement;
+
+    // 3. Search all own properties (including private _ prefixed)
+    for (const key of Object.keys(s)) {
+      const val = s[key];
+      if (val instanceof HTMLMediaElement) return val;
+    }
+
+    // 4. Deep search one level: properties of properties
+    for (const key of Object.keys(s)) {
+      const val = s[key];
+      if (val && typeof val === "object" && !(val instanceof AudioContext) && !(val instanceof AudioNode)) {
+        try {
+          for (const subKey of Object.keys(val)) {
+            if (val[subKey] instanceof HTMLMediaElement) return val[subKey];
+          }
+        } catch { /* ignore */ }
+      }
+    }
+
     return null;
   }
 
   _getCurrentTime(playlistSound) {
     if (!playlistSound?.sound) return 0;
     try {
+      // First try the audio element directly (most accurate)
+      const el = this._getAudioElement(playlistSound);
+      if (el && isFinite(el.currentTime)) return el.currentTime;
+
+      // Fallback to Foundry Sound API
       const s = playlistSound.sound;
       if (typeof s.currentTime === "number" && isFinite(s.currentTime)) return s.currentTime;
-      const el = this._getAudioElement(playlistSound);
-      if (el) return el.currentTime || 0;
+
+      // Check for progress property
+      if (typeof s.progress === "number" && isFinite(s.duration)) {
+        return s.progress * s.duration;
+      }
     } catch { /* ignore */ }
     return 0;
   }
@@ -403,10 +438,13 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
   _getDuration(playlistSound) {
     if (!playlistSound?.sound) return 0;
     try {
-      const s = playlistSound.sound;
-      if (typeof s.duration === "number" && isFinite(s.duration)) return s.duration;
+      // First try the audio element directly
       const el = this._getAudioElement(playlistSound);
-      if (el && isFinite(el.duration)) return el.duration;
+      if (el && isFinite(el.duration) && el.duration > 0) return el.duration;
+
+      // Fallback to Foundry Sound API
+      const s = playlistSound.sound;
+      if (typeof s.duration === "number" && isFinite(s.duration) && s.duration > 0) return s.duration;
     } catch { /* ignore */ }
     return 0;
   }
@@ -418,20 +456,29 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const duration = this._getDuration(playlistSound);
     if (!duration || !isFinite(duration)) return;
 
-    const seekTime = percent * duration;
+    const seekTime = Math.max(0, Math.min(percent * duration, duration - 0.1));
 
     try {
-      // Method 1: HTMLMediaElement (most common for music)
+      // Method 1: HTMLMediaElement - direct currentTime set
       const el = this._getAudioElement(playlistSound);
       if (el) {
         el.currentTime = seekTime;
         return;
       }
-      // Method 2: Stop and restart with offset (AudioBuffer)
+
+      // Method 2: Foundry Sound API offset restart
       const s = playlistSound.sound;
+      if (typeof s.offset !== "undefined") {
+        s.offset = seekTime;
+        return;
+      }
+
+      // Method 3: Stop and replay with offset
       if (s.playing) {
+        const vol = s.volume;
+        const loop = s.loop;
         s.stop();
-        s.play({ offset: seekTime, volume: s.volume, loop: s.loop });
+        s.play({ offset: seekTime, volume: vol, loop: loop });
       }
     } catch (e) {
       console.warn("Sounds Player | Seek failed:", e);
@@ -610,7 +657,7 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
     el.querySelector(".mp-btn-backward")?.addEventListener("click", () => this._onPrevTrack());
     el.querySelector(".mp-btn-forward")?.addEventListener("click", () => this._onNextTrack());
 
-    // Timeline seek
+    // Timeline seek - robust drag handling
     const timeline = el.querySelector(".mp-timeline");
     if (timeline) {
       let dragging = false;
@@ -618,10 +665,31 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
         const rect = timeline.getBoundingClientRect();
         const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
         this._seekToPercent(percent);
+
+        // Also update the progress bar visually immediately for responsiveness
+        const progress = el.querySelector(".mp-timeline-progress");
+        if (progress) progress.style.width = (percent * 100) + "%";
       };
-      timeline.addEventListener("mousedown", (e) => { dragging = true; this._seeking = true; handleSeek(e); });
-      document.addEventListener("mousemove", (e) => { if (dragging) handleSeek(e); });
-      document.addEventListener("mouseup", () => { dragging = false; this._seeking = false; });
+
+      timeline.addEventListener("mousedown", (e) => {
+        e.preventDefault(); // prevent text selection
+        dragging = true;
+        this._seeking = true;
+        handleSeek(e);
+      });
+
+      window.addEventListener("mousemove", (e) => {
+        if (!dragging) return;
+        e.preventDefault();
+        handleSeek(e);
+      });
+
+      window.addEventListener("mouseup", () => {
+        if (dragging) {
+          dragging = false;
+          this._seeking = false;
+        }
+      });
     }
 
     el.querySelector(".mp-volume-slider")?.addEventListener("input", (e) => this._onVolumeChange(e));
