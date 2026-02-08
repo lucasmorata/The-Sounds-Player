@@ -257,6 +257,7 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
     this._seeking = false;
     this._allPlaylistImages = this._loadAllPlaylistImages();
     this._playlistVolumes = this._loadPlaylistVolumes();
+    this._baseVolumes = this._loadBaseVolumes();
     this._expandedVolumes = new Set();
     this._manualStops = new Set();
   }
@@ -334,7 +335,7 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   // =============================================
-  // PLAYLIST VOLUME (local per-playlist)
+  // PLAYLIST VOLUME (local per-playlist multiplier)
   // =============================================
   _loadPlaylistVolumes() {
     try {
@@ -356,28 +357,62 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
     this._applyPlaylistVolume(playlistId);
   }
 
-  _applyPlaylistVolume(playlistId) {
-    const vol = this._getPlaylistVolume(playlistId);
+  // Update all sounds in this playlist via Foundry document API
+  // effectiveVolume = baseVolume * playlistVolume
+  async _applyPlaylistVolume(playlistId) {
+    const plVol = this._getPlaylistVolume(playlistId);
     const playlist = game.playlists?.get(playlistId);
     if (!playlist) return;
+
+    const updates = [];
     for (const sound of playlist.sounds) {
-      if (sound.playing && sound.sound) {
-        try {
-          const effectiveVol = sound.volume * vol;
-          // Foundry v13: use fade() for immediate volume change (0ms duration = instant)
-          sound.sound.fade(effectiveVol, { duration: 0 });
-        } catch {
-          // Fallback: try direct volume set
-          try { sound.sound.volume = sound.volume * vol; } catch {}
-        }
+      const baseVol = this._getBaseVolume(sound.id);
+      const effectiveVol = Math.max(0, Math.min(1, baseVol * plVol));
+      // Only update if the volume actually changed
+      if (Math.abs(sound.volume - effectiveVol) > 0.005) {
+        updates.push({ _id: sound.id, volume: effectiveVol });
+      }
+    }
+
+    if (updates.length > 0) {
+      try {
+        await playlist.updateEmbeddedDocuments("PlaylistSound", updates);
+      } catch (e) {
+        console.warn("Sounds Player | Playlist volume update failed:", e);
       }
     }
   }
 
-  _applyAllPlaylistVolumes() {
+  // =============================================
+  // BASE VOLUME (per-sound, stored in localStorage)
+  // Tracks the user-intended individual volume
+  // separately from the effective document volume
+  // (which includes the playlist multiplier).
+  // =============================================
+  _loadBaseVolumes() {
+    try {
+      return JSON.parse(localStorage.getItem("sounds-player-base-volumes")) || {};
+    } catch { return {}; }
+  }
+
+  _saveBaseVolumes() {
+    localStorage.setItem("sounds-player-base-volumes", JSON.stringify(this._baseVolumes));
+  }
+
+  _getBaseVolume(soundId) {
+    if (this._baseVolumes[soundId] !== undefined) return this._baseVolumes[soundId];
+    // Fallback: use the current document volume as the base
+    // (correct when playlist volume is 1, i.e. first use)
     for (const playlist of game.playlists) {
-      this._applyPlaylistVolume(playlist.id);
+      const sound = playlist.sounds.get(soundId);
+      if (sound) return sound.volume ?? 0.5;
     }
+    return 0.5;
+  }
+
+  _setBaseVolume(soundId, volume) {
+    this._baseVolumes[soundId] = volume;
+    this._saveBaseVolumes();
   }
 
   // =============================================
@@ -476,7 +511,7 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
       activeSoundName: focusedSound?.name || "",
       isPlaying: focusedSound?.playing || false,
       isLooping: focusedSound?.repeat || false,
-      volume: focusedSound?.volume ?? 0.5,
+      volume: focusedSound ? this._getBaseVolume(focusedSound.id) : 0.5,
       selectSlotLabel: i18n.t("selectSlot"),
       playlistsLabel: i18n.t("playlists"),
       selectPlaylistLabel: i18n.t("selectPlaylist"),
@@ -1053,21 +1088,22 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   async _onVolumeChange(event) {
-    const volume = parseFloat(event.target.value);
+    const baseVolume = parseFloat(event.target.value);
     if (!this.focusedSoundId) return;
 
     const playlist = this._getPlaylist();
     const sound = playlist?.sounds.get(this.focusedSoundId);
     if (!sound) return;
 
-    // Update Foundry document (syncs to all clients)
-    await sound.update({ volume });
+    // Save base volume (user-intended individual volume)
+    this._setBaseVolume(this.focusedSoundId, baseVolume);
 
-    // Apply playlist volume multiplier locally
+    // Compute effective volume = base * playlist multiplier
     const plVol = this._getPlaylistVolume(this.currentPlaylist);
-    if (sound.sound) {
-      try { sound.sound.volume = volume * plVol; } catch { /* ignore */ }
-    }
+    const effectiveVol = Math.max(0, Math.min(1, baseVolume * plVol));
+
+    // Update Foundry document (syncs to all clients)
+    await sound.update({ volume: effectiveVol });
   }
 
   _onPrevTrack() {
@@ -1118,7 +1154,6 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
     this._updateInterval = setInterval(() => {
       if (!this.element) { clearInterval(this._updateInterval); return; }
       this._updateUIOnly();
-      this._applyAllPlaylistVolumes();
     }, 100);
   }
 
@@ -1200,10 +1235,10 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const timeTotal = el.querySelector(".mp-time-total");
     if (timeTotal) timeTotal.textContent = this._formatTime(duration);
 
-    // Volume slider
+    // Volume slider - show base volume (not effective volume)
     const volumeSlider = el.querySelector(".mp-volume-slider");
     if (volumeSlider && document.activeElement !== volumeSlider && focusedSound) {
-      volumeSlider.value = focusedSound.volume ?? 0.5;
+      volumeSlider.value = this._getBaseVolume(focusedSound.id);
     }
 
     // Title
