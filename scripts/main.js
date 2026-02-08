@@ -13,6 +13,7 @@ const i18n = {
         "changeImage": "Change image",
         "removeImage": "Remove image",
         "removeSound": "Remove sound",
+        "editSound": "Edit sound",
         "playlistDeleted": "Playlist deleted",
         "playlistCreated": "Playlist created",
         "selectSound": "Select a sound",
@@ -28,7 +29,13 @@ const i18n = {
         "editPlaylist": "Edit playlist",
         "confirmDelete": "Delete this playlist?",
         "importedSounds": "sounds imported",
-        "playlists": "Playlists"
+        "playlists": "Playlists",
+        "selectPlaylist": "Select a playlist to begin",
+        "changeCategory": "Category",
+        "categoryMusic": "Music",
+        "categoryEnvironment": "Environment",
+        "categoryInterface": "Interface",
+        "volume": "Volume"
       },
       fr: {
         "empty": "Vide",
@@ -36,6 +43,7 @@ const i18n = {
         "changeImage": "Changer l'image",
         "removeImage": "Supprimer l'image",
         "removeSound": "Supprimer le son",
+        "editSound": "Éditer le son",
         "playlistDeleted": "Playlist supprimée",
         "playlistCreated": "Playlist créée",
         "selectSound": "Sélectionner un son",
@@ -51,7 +59,13 @@ const i18n = {
         "editPlaylist": "Éditer la playlist",
         "confirmDelete": "Supprimer cette playlist ?",
         "importedSounds": "sons importés",
-        "playlists": "Playlists"
+        "playlists": "Playlists",
+        "selectPlaylist": "Sélectionnez une playlist pour commencer",
+        "changeCategory": "Catégorie",
+        "categoryMusic": "Musique",
+        "categoryEnvironment": "Environnement",
+        "categoryInterface": "Interface",
+        "volume": "Volume"
       }
     };
     const lang = this.lang === "fr" ? "fr" : "en";
@@ -60,82 +74,20 @@ const i18n = {
 };
 
 // =============================================
-// CUSTOM AUDIO PLAYER
+// PLAYLIST CATEGORIES & HELPERS
 // =============================================
-class CustomAudioPlayer {
-  constructor() {
-    this.audio = new Audio();
-    this.audio.preload = "auto";
-    this.volume = 0.5;
-    this.loop = false;
-    this.currentPath = null;
-    this.onEnded = null;
-    
-    this.audio.addEventListener("ended", () => {
-      if (this.loop) {
-        this.audio.currentTime = 0;
-        this.audio.play();
-      } else if (this.onEnded) {
-        this.onEnded();
-      }
-    });
+const PLAYLIST_CATEGORIES = {
+  music: "🎵",
+  environment: "🌲",
+  interface: "🔔"
+};
+
+function cleanSoundName(path) {
+  try {
+    return decodeURIComponent(path.split("/").pop()).replace(/\.[^/.]+$/, "");
+  } catch {
+    return path.split("/").pop().replace(/\.[^/.]+$/, "");
   }
-  
-  async load(path) {
-    if (this.currentPath === path && this.audio.src) {
-      return;
-    }
-    this.currentPath = path;
-    this.audio.src = path;
-    this.audio.volume = this.volume;
-    this.audio.loop = this.loop;
-    
-    return new Promise((resolve, reject) => {
-      this.audio.addEventListener("canplay", () => resolve(), { once: true });
-      this.audio.addEventListener("error", (e) => reject(e), { once: true });
-      this.audio.load();
-    });
-  }
-  
-  async play() {
-    if (!this.audio.src) return;
-    try {
-      await this.audio.play();
-    } catch (e) {
-      console.error("Sounds Player | Play error:", e);
-    }
-  }
-  
-  pause() { this.audio.pause(); }
-  
-  stop() {
-    this.audio.pause();
-    this.audio.currentTime = 0;
-  }
-  
-  seek(time) {
-    if (!this.audio.src) return;
-    this.audio.currentTime = Math.max(0, Math.min(time, this.audio.duration || 0));
-  }
-  
-  seekPercent(percent) {
-    if (!this.audio.duration) return;
-    this.seek(percent * this.audio.duration);
-  }
-  
-  setVolume(vol) {
-    this.volume = Math.max(0, Math.min(1, vol));
-    this.audio.volume = this.volume;
-  }
-  
-  setLoop(loop) {
-    this.loop = loop;
-    this.audio.loop = loop;
-  }
-  
-  get isPlaying() { return !this.audio.paused && !this.audio.ended; }
-  get currentTime() { return this.audio.currentTime || 0; }
-  get duration() { return this.audio.duration || 0; }
 }
 
 // =============================================
@@ -175,7 +127,7 @@ class SoundPickerApp extends HandlebarsApplicationMixin(ApplicationV2) {
         playlists.push({ id: playlist.id, name: playlist.name, sounds });
       }
     }
-    return { 
+    return {
       playlists,
       searchPlaceholder: i18n.t("search"),
       addSoundLabel: i18n.t("addSound"),
@@ -201,7 +153,7 @@ class SoundPickerApp extends HandlebarsApplicationMixin(ApplicationV2) {
         if (sound && this.callback) {
           this.callback({
             id: sound.id, name: sound.name, path: sound.path,
-            playlistId: playlist.id, playlistName: playlist.name, playlistSound: sound
+            playlistId: playlist.id, playlistName: playlist.name
           });
         }
         this.close();
@@ -213,8 +165,8 @@ class SoundPickerApp extends HandlebarsApplicationMixin(ApplicationV2) {
         type: "audio",
         callback: (path) => {
           if (path && this.callback) {
-            const name = path.split("/").pop().replace(/\.[^/.]+$/, "");
-            this.callback({ id: null, name, path, playlistId: null, playlistName: "Local", playlistSound: null });
+            const name = cleanSoundName(path);
+            this.callback({ id: null, name, path, playlistId: null, playlistName: null });
           }
           this.close();
         }
@@ -234,21 +186,19 @@ class SoundPickerApp extends HandlebarsApplicationMixin(ApplicationV2) {
         if (!folderPath) return;
         const result = await FilePicker.browse("data", folderPath);
         const audioFiles = result.files.filter(f => /\.(mp3|ogg|wav|webm|m4a|flac)$/i.test(f));
-        
+
         if (audioFiles.length === 0) {
           ui.notifications.warn("No audio files found in folder");
           return;
         }
 
-        // Return first file and signal batch import
         if (this.callback) {
           this.callback({
             id: null,
-            name: audioFiles[0].split("/").pop().replace(/\.[^/.]+$/, ""),
+            name: cleanSoundName(audioFiles[0]),
             path: audioFiles[0],
             playlistId: null,
-            playlistName: "Local",
-            playlistSound: null,
+            playlistName: null,
             batchFiles: audioFiles
           });
         }
@@ -293,18 +243,23 @@ class PlaylistNameDialog {
 
 // =============================================
 // MAIN SOUNDS PLAYER (ApplicationV2)
+// Uses Foundry native playlists for audio
+// so all connected users hear the sounds.
 // =============================================
 class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
   constructor(options = {}) {
     super(options);
-    // Per-playlist state
-    this.playlistStates = {}; // { playlistId: { slots, players, activeSlot } }
     this.currentPlaylist = "";
+    this.focusedSoundId = null;
     this._updateInterval = null;
     this._contextMenu = null;
     this._draggedSlot = null;
-    this._saving = false;
+    this._seeking = false;
     this._allPlaylistImages = this._loadAllPlaylistImages();
+    this._playlistVolumes = this._loadPlaylistVolumes();
+    this._baseVolumes = this._loadBaseVolumes();
+    this._expandedVolumes = new Set();
+    this._manualStops = new Set();
   }
 
   static DEFAULT_OPTIONS = {
@@ -318,123 +273,269 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
     main: { template: "modules/sounds-player/templates/player.html" }
   };
 
-  // Get/create state for a playlist
-  _getPlaylistState(playlistId) {
-    if (!this.playlistStates[playlistId]) {
-      this.playlistStates[playlistId] = { slots: [], players: [], activeSlot: null };
-    }
-    return this.playlistStates[playlistId];
+  // =============================================
+  // DATA ACCESSORS
+  // =============================================
+  _getPlaylist(id) {
+    return game.playlists?.get(id || this.currentPlaylist);
   }
 
-  get currentState() {
-    if (!this.currentPlaylist) return { slots: [], players: [], activeSlot: null };
-    return this._getPlaylistState(this.currentPlaylist);
+  _getSounds(playlistId) {
+    const playlist = this._getPlaylist(playlistId);
+    if (!playlist) return [];
+    return Array.from(playlist.sounds);
   }
 
-  get slots() { return this.currentState.slots; }
-  set slots(v) { if (this.currentPlaylist) this._getPlaylistState(this.currentPlaylist).slots = v; }
-  
-  get players() { return this.currentState.players; }
-  set players(v) { if (this.currentPlaylist) this._getPlaylistState(this.currentPlaylist).players = v; }
-  
-  get activeSlot() { return this.currentState.activeSlot; }
-  set activeSlot(v) { if (this.currentPlaylist) this._getPlaylistState(this.currentPlaylist).activeSlot = v; }
-
-  get slotImages() {
-    if (!this.currentPlaylist) return {};
-    return this._allPlaylistImages[this.currentPlaylist] || {};
-  }
-  
-  set slotImages(images) {
-    if (!this.currentPlaylist) return;
-    this._allPlaylistImages[this.currentPlaylist] = images;
-    this._saveAllPlaylistImages();
+  _getFocusedSound() {
+    if (!this.focusedSoundId || !this.currentPlaylist) return null;
+    const playlist = this._getPlaylist();
+    return playlist?.sounds.get(this.focusedSoundId) || null;
   }
 
+  _isPlaylistPlaying(playlistId) {
+    const playlist = game.playlists?.get(playlistId);
+    if (!playlist) return false;
+    return playlist.sounds.some(s => s.playing);
+  }
+
+  _getPlaylistCategory(playlistId) {
+    const playlist = game.playlists?.get(playlistId);
+    return playlist?.getFlag("sounds-player", "category") || "music";
+  }
+
+  // =============================================
+  // IMAGE MANAGEMENT (keyed by soundId)
+  // =============================================
   _loadAllPlaylistImages() {
     try {
-      return JSON.parse(localStorage.getItem("sounds-player-all-images")) || {};
-    } catch (e) { return {}; }
+      return JSON.parse(localStorage.getItem("sounds-player-images-v2")) || {};
+    } catch { return {}; }
   }
 
   _saveAllPlaylistImages() {
-    localStorage.setItem("sounds-player-all-images", JSON.stringify(this._allPlaylistImages));
+    localStorage.setItem("sounds-player-images-v2", JSON.stringify(this._allPlaylistImages));
   }
 
-  _setSlotImage(index, path) {
+  _getSlotImage(soundId) {
+    if (!this.currentPlaylist) return null;
+    return this._allPlaylistImages[this.currentPlaylist]?.[soundId] || null;
+  }
+
+  _setSlotImage(soundId, path) {
     if (!this.currentPlaylist) return;
     if (!this._allPlaylistImages[this.currentPlaylist]) this._allPlaylistImages[this.currentPlaylist] = {};
-    this._allPlaylistImages[this.currentPlaylist][index] = path;
+    this._allPlaylistImages[this.currentPlaylist][soundId] = path;
     this._saveAllPlaylistImages();
   }
 
-  _removeSlotImage(index) {
+  _removeSlotImage(soundId) {
     if (!this.currentPlaylist || !this._allPlaylistImages[this.currentPlaylist]) return;
-    delete this._allPlaylistImages[this.currentPlaylist][index];
+    delete this._allPlaylistImages[this.currentPlaylist][soundId];
     this._saveAllPlaylistImages();
   }
 
-  // Check if any playlist is playing
-  _isPlaylistPlaying(playlistId) {
-    const state = this.playlistStates[playlistId];
-    if (!state) return false;
-    return state.players.some(p => p?.isPlaying);
+  // =============================================
+  // PLAYLIST VOLUME (local per-playlist multiplier)
+  // =============================================
+  _loadPlaylistVolumes() {
+    try {
+      return JSON.parse(localStorage.getItem("sounds-player-pl-volumes")) || {};
+    } catch { return {}; }
   }
 
-  async _prepareContext() {
-    const anyPlaying = this.players.some(p => p?.isPlaying);
-    
-    const slots = this.slots.map((soundData, index) => {
-      const player = this.players[index];
-      const image = this.slotImages[index];
-      return {
-        index, empty: !soundData,
-        name: soundData?.name || i18n.t("empty"),
-        playing: player?.isPlaying || false,
-        active: this.activeSlot === index,
-        image: image || null
-      };
-    });
+  _savePlaylistVolumes() {
+    localStorage.setItem("sounds-player-pl-volumes", JSON.stringify(this._playlistVolumes));
+  }
 
-    const activeSound = this._getActiveSound();
-    const activePlayer = this._getActivePlayer();
-    
-    // Build playlist list
-    const playlistItems = [];
+  _getPlaylistVolume(playlistId) {
+    return this._playlistVolumes[playlistId] ?? 1;
+  }
+
+  _setPlaylistVolume(playlistId, volume) {
+    this._playlistVolumes[playlistId] = volume;
+    this._savePlaylistVolumes();
+    this._applyPlaylistVolume(playlistId);
+  }
+
+  // Update all sounds in this playlist via Foundry document API
+  // effectiveVolume = baseVolume * playlistVolume
+  async _applyPlaylistVolume(playlistId) {
+    const plVol = this._getPlaylistVolume(playlistId);
+    const playlist = game.playlists?.get(playlistId);
+    if (!playlist) return;
+
+    const updates = [];
+    for (const sound of playlist.sounds) {
+      const baseVol = this._getBaseVolume(sound.id);
+      const effectiveVol = Math.max(0, Math.min(1, baseVol * plVol));
+      // Only update if the volume actually changed
+      if (Math.abs(sound.volume - effectiveVol) > 0.005) {
+        updates.push({ _id: sound.id, volume: effectiveVol });
+      }
+    }
+
+    if (updates.length > 0) {
+      try {
+        await playlist.updateEmbeddedDocuments("PlaylistSound", updates);
+      } catch (e) {
+        console.warn("Sounds Player | Playlist volume update failed:", e);
+      }
+    }
+  }
+
+  // =============================================
+  // BASE VOLUME (per-sound, stored in localStorage)
+  // Tracks the user-intended individual volume
+  // separately from the effective document volume
+  // (which includes the playlist multiplier).
+  // =============================================
+  _loadBaseVolumes() {
+    try {
+      return JSON.parse(localStorage.getItem("sounds-player-base-volumes")) || {};
+    } catch { return {}; }
+  }
+
+  _saveBaseVolumes() {
+    localStorage.setItem("sounds-player-base-volumes", JSON.stringify(this._baseVolumes));
+  }
+
+  _getBaseVolume(soundId) {
+    if (this._baseVolumes[soundId] !== undefined) return this._baseVolumes[soundId];
+    // Fallback: use the current document volume as the base
+    // (correct when playlist volume is 1, i.e. first use)
     for (const playlist of game.playlists) {
+      const sound = playlist.sounds.get(soundId);
+      if (sound) return sound.volume ?? 0.5;
+    }
+    return 0.5;
+  }
+
+  _setBaseVolume(soundId, volume) {
+    this._baseVolumes[soundId] = volume;
+    this._saveBaseVolumes();
+  }
+
+  // =============================================
+  // SEEK HELPERS
+  // In Foundry v13, Sound and AudioContainer are MERGED.
+  // Sound.stop() corrupts the Sound state (duration/currentTime = 0).
+  // Sound.currentTime setter doesn't actually seek.
+  // The only reliable way is the Foundry document API:
+  //   update({ playing: false }) then update({ playing: true, pausedTime })
+  // We only seek on mouseup to avoid spamming the server during drag.
+  // =============================================
+
+  _getCurrentTime(playlistSound) {
+    if (!playlistSound?.sound) return 0;
+    try {
+      const t = playlistSound.sound.currentTime;
+      if (typeof t === "number" && isFinite(t)) return t;
+    } catch {}
+    return 0;
+  }
+
+  _getDuration(playlistSound) {
+    if (!playlistSound?.sound) return 0;
+    try {
+      const d = playlistSound.sound.duration;
+      if (typeof d === "number" && isFinite(d) && d > 0) return d;
+    } catch {}
+    return 0;
+  }
+
+  // Actually perform the seek via Foundry document API.
+  // Called only on mouseup after drag, or on single click.
+  async _doSeek(percent) {
+    const playlistSound = this._getFocusedSound();
+    if (!playlistSound) return;
+
+    const duration = this._getDuration(playlistSound);
+    if (!duration || !isFinite(duration)) return;
+
+    const seekTime = Math.max(0, Math.min(percent * duration, duration - 0.5));
+
+    // Use Foundry document API: stop then restart at position
+    try {
+      this._manualStops.add(playlistSound.id);
+      await playlistSound.update({ playing: false });
+      await playlistSound.update({ playing: true, pausedTime: seekTime });
+    } catch (e) {
+      console.warn("Sounds Player | Seek failed:", e);
+    }
+  }
+
+  // =============================================
+  // PREPARE CONTEXT
+  // =============================================
+  async _prepareContext() {
+    const playlist = this._getPlaylist();
+    const hasPlaylist = !!playlist;
+    const sounds = this._getSounds();
+
+    // Validate focusedSoundId
+    if (this.focusedSoundId && !playlist?.sounds.get(this.focusedSoundId)) {
+      this.focusedSoundId = null;
+    }
+
+    const slots = sounds.map((sound, index) => ({
+      index,
+      id: sound.id,
+      name: sound.name,
+      playing: sound.playing,
+      active: this.focusedSoundId === sound.id,
+      image: this._getSlotImage(sound.id)
+    }));
+
+    const focusedSound = this._getFocusedSound();
+    const anyPlaying = sounds.some(s => s.playing);
+
+    const playlistItems = [];
+    for (const pl of game.playlists) {
+      const category = this._getPlaylistCategory(pl.id);
       playlistItems.push({
-        id: playlist.id,
-        name: playlist.name,
-        selected: this.currentPlaylist === playlist.id,
-        playing: this._isPlaylistPlaying(playlist.id)
+        id: pl.id,
+        name: pl.name,
+        selected: this.currentPlaylist === pl.id,
+        playing: this._isPlaylistPlaying(pl.id),
+        emoji: PLAYLIST_CATEGORIES[category] || PLAYLIST_CATEGORIES.music,
+        volume: this._getPlaylistVolume(pl.id),
+        volumeExpanded: this._expandedVolumes.has(pl.id)
       });
     }
-    
+
     return {
-      slots, playlistItems,
-      hasActiveSound: !!activeSound,
-      activeSoundName: activeSound?.name || "",
-      isPlaying: activePlayer?.isPlaying || false,
-      isLooping: activePlayer?.loop || false,
-      volume: activePlayer?.volume ?? 0.5,
-      currentPlaylist: this.currentPlaylist,
+      slots,
+      playlistItems,
+      hasPlaylist,
+      hasActiveSound: !!focusedSound,
+      activeSoundName: focusedSound?.name || "",
+      isPlaying: focusedSound?.playing || false,
+      isLooping: focusedSound?.repeat || false,
+      volume: focusedSound ? this._getBaseVolume(focusedSound.id) : 0.5,
       selectSlotLabel: i18n.t("selectSlot"),
       playlistsLabel: i18n.t("playlists"),
+      selectPlaylistLabel: i18n.t("selectPlaylist"),
       anyPlaying
     };
   }
 
+  // =============================================
+  // RENDER & EVENT BINDING
+  // =============================================
   _onRender(context, options) {
     const el = this.element;
 
     document.addEventListener("click", () => this._closeContextMenu());
 
-    // Playlist sidebar
+    // --- Playlist sidebar ---
     el.querySelectorAll(".mp-playlist-item").forEach(item => {
       const playlistId = item.dataset.playlistId;
-      
-      item.addEventListener("click", () => this._onPlaylistSelect(playlistId));
-      
+
+      item.addEventListener("click", (e) => {
+        if (e.target.closest(".mp-playlist-vol-toggle")) return;
+        this._onPlaylistSelect(playlistId);
+      });
+
       item.addEventListener("contextmenu", (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -442,88 +543,142 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
       });
     });
 
+    // Playlist volume toggles
+    el.querySelectorAll(".mp-playlist-vol-toggle").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const playlistId = btn.dataset.playlistId;
+        if (this._expandedVolumes.has(playlistId)) {
+          this._expandedVolumes.delete(playlistId);
+        } else {
+          this._expandedVolumes.add(playlistId);
+        }
+        this.render();
+      });
+    });
+
+    // Playlist volume sliders
+    el.querySelectorAll(".mp-playlist-volume-slider").forEach(slider => {
+      slider.addEventListener("input", (e) => {
+        const playlistId = slider.dataset.playlistId;
+        this._setPlaylistVolume(playlistId, parseFloat(e.target.value));
+      });
+    });
+
     el.querySelector(".mp-btn-new-playlist")?.addEventListener("click", () => this._onCreatePlaylist());
 
-    // Slots
+    // --- Slots ---
     el.querySelectorAll(".mp-slot").forEach(slot => {
-      const index = parseInt(slot.dataset.slot);
-      
       if (slot.classList.contains("mp-slot-add")) {
-        slot.addEventListener("click", () => this._addSlot());
+        slot.addEventListener("click", () => this._addSound());
         return;
       }
 
+      const soundId = slot.dataset.soundId;
+      const index = parseInt(slot.dataset.slot);
+
       slot.addEventListener("click", (e) => {
         if (e.button !== 0) return;
-        if (!this.slots[index]) {
-          this._openSoundPicker(index);
-        } else {
-          this.activeSlot = index;
-          this._updateUIOnly();
-        }
+        this.focusedSoundId = soundId;
+        this._updateUIOnly();
       });
 
-      slot.addEventListener("dblclick", () => this._openSoundPicker(index));
+      slot.addEventListener("dblclick", () => {
+        this._togglePlaySound(soundId);
+      });
 
       slot.addEventListener("contextmenu", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (this.slots[index]) this._showSlotContextMenu(e, index);
+        this._showSlotContextMenu(e, soundId);
       });
 
       // Drag & drop
       slot.setAttribute("draggable", "true");
-      
+
       slot.addEventListener("dragstart", (e) => {
-        if (!this.slots[index]) { e.preventDefault(); return; }
         this._draggedSlot = index;
         slot.classList.add("dragging");
         e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", index.toString());
+        e.dataTransfer.setData("text/plain", soundId);
       });
-      
+
       slot.addEventListener("dragend", () => {
         slot.classList.remove("dragging");
         this._draggedSlot = null;
         el.querySelectorAll(".mp-slot").forEach(s => s.classList.remove("drag-over"));
       });
-      
+
       slot.addEventListener("dragover", (e) => {
         e.preventDefault();
-        if (this._draggedSlot !== null && this._draggedSlot !== index) slot.classList.add("drag-over");
+        if (this._draggedSlot !== null && this._draggedSlot !== index) {
+          slot.classList.add("drag-over");
+        }
       });
-      
+
       slot.addEventListener("dragleave", () => slot.classList.remove("drag-over"));
-      
+
       slot.addEventListener("drop", (e) => {
         e.preventDefault();
         slot.classList.remove("drag-over");
         if (this._draggedSlot !== null && this._draggedSlot !== index) {
-          this._reorderSlots(this._draggedSlot, index);
+          this._reorderSounds(this._draggedSlot, index);
           return;
         }
-        this._onExternalDrop(e, index);
+        this._onExternalDrop(e);
       });
     });
 
-    // Controls
+    // --- Player controls ---
     el.querySelector(".mp-btn-play")?.addEventListener("click", () => this._onPlayPause());
     el.querySelector(".mp-btn-stop")?.addEventListener("click", () => this._onStop());
     el.querySelector(".mp-btn-loop")?.addEventListener("click", () => this._onToggleLoop());
     el.querySelector(".mp-btn-backward")?.addEventListener("click", () => this._onPrevTrack());
     el.querySelector(".mp-btn-forward")?.addEventListener("click", () => this._onNextTrack());
 
-    // Timeline
+    // Timeline seek:
+    // - During drag: only update the visual progress bar (no audio change)
+    // - On mouseup: perform actual seek via Foundry document API
     const timeline = el.querySelector(".mp-timeline");
     if (timeline) {
       let dragging = false;
-      const handleSeek = (e) => {
+      let seekPercent = 0;
+
+      const updateVisual = (e) => {
         const rect = timeline.getBoundingClientRect();
-        this._seekToPercent(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)));
+        seekPercent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        const progress = el.querySelector(".mp-timeline-progress");
+        if (progress) progress.style.width = (seekPercent * 100) + "%";
+
+        // Update time display during drag
+        const focusedSound = this._getFocusedSound();
+        const duration = this._getDuration(focusedSound);
+        const timeCurrent = el.querySelector(".mp-time-current");
+        if (timeCurrent && duration) {
+          timeCurrent.textContent = this._formatTime(seekPercent * duration);
+        }
       };
-      timeline.addEventListener("mousedown", (e) => { dragging = true; handleSeek(e); });
-      document.addEventListener("mousemove", (e) => { if (dragging) handleSeek(e); });
-      document.addEventListener("mouseup", () => { dragging = false; });
+
+      timeline.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        dragging = true;
+        this._seeking = true;
+        updateVisual(e);
+      });
+
+      window.addEventListener("mousemove", (e) => {
+        if (!dragging) return;
+        e.preventDefault();
+        updateVisual(e);
+      });
+
+      window.addEventListener("mouseup", () => {
+        if (dragging) {
+          dragging = false;
+          this._seeking = false;
+          this._doSeek(seekPercent);
+        }
+      });
     }
 
     el.querySelector(".mp-volume-slider")?.addEventListener("input", (e) => this._onVolumeChange(e));
@@ -536,53 +691,160 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
   // =============================================
   _showPlaylistContextMenu(event, playlistId) {
     this._closeContextMenu();
-    
+
     const menu = document.createElement("div");
     menu.className = "mp-context-menu";
     menu.style.left = event.clientX + "px";
     menu.style.top = event.clientY + "px";
-    
+
     // Edit playlist
-    const editItem = document.createElement("div");
-    editItem.className = "mp-context-menu-item";
-    editItem.innerHTML = `<i class="fas fa-edit"></i> ${i18n.t("editPlaylist")}`;
-    editItem.addEventListener("click", (e) => {
-      e.stopPropagation();
-      this._closeContextMenu();
-      this._editPlaylist(playlistId);
+    this._addMenuItem(menu, "fa-edit", i18n.t("editPlaylist"), () => {
+      const playlist = game.playlists.get(playlistId);
+      if (playlist) playlist.sheet.render(true);
     });
-    menu.appendChild(editItem);
-    
+
     // Import folder
-    const importItem = document.createElement("div");
-    importItem.className = "mp-context-menu-item";
-    importItem.innerHTML = `<i class="fas fa-folder-open"></i> ${i18n.t("importFolder")}`;
-    importItem.addEventListener("click", (e) => {
-      e.stopPropagation();
-      this._closeContextMenu();
+    this._addMenuItem(menu, "fa-folder-open", i18n.t("importFolder"), () => {
       this._importFolderToPlaylist(playlistId);
     });
-    menu.appendChild(importItem);
-    
-    // Separator
-    const sep = document.createElement("div");
-    sep.style.cssText = "height:1px;background:#444;margin:4px 0";
-    menu.appendChild(sep);
-    
+
+    // Category submenu
+    this._addMenuSeparator(menu);
+    const catHeader = document.createElement("div");
+    catHeader.className = "mp-context-menu-header";
+    catHeader.textContent = i18n.t("changeCategory");
+    menu.appendChild(catHeader);
+
+    for (const [key, emoji] of Object.entries(PLAYLIST_CATEGORIES)) {
+      const label = i18n.t("category" + key.charAt(0).toUpperCase() + key.slice(1));
+      const current = this._getPlaylistCategory(playlistId);
+      this._addMenuItem(menu, null, `${emoji} ${label}${current === key ? " \u2713" : ""}`, async () => {
+        const playlist = game.playlists.get(playlistId);
+        if (playlist) await playlist.setFlag("sounds-player", "category", key);
+        this.render();
+      });
+    }
+
+    this._addMenuSeparator(menu);
+
     // Delete
-    const deleteItem = document.createElement("div");
-    deleteItem.className = "mp-context-menu-item danger";
-    deleteItem.innerHTML = `<i class="fas fa-trash"></i> ${i18n.t("deletePlaylist")}`;
-    deleteItem.addEventListener("click", (e) => {
-      e.stopPropagation();
-      this._closeContextMenu();
+    this._addMenuItem(menu, "fa-trash", i18n.t("deletePlaylist"), () => {
       this._deletePlaylist(playlistId);
-    });
-    menu.appendChild(deleteItem);
-    
+    }, true);
+
     document.body.appendChild(menu);
     this._contextMenu = menu;
     this._adjustContextMenuPosition(menu);
+  }
+
+  // =============================================
+  // SLOT CONTEXT MENU
+  // =============================================
+  _showSlotContextMenu(event, soundId) {
+    this._closeContextMenu();
+
+    const menu = document.createElement("div");
+    menu.className = "mp-context-menu";
+    menu.style.left = event.clientX + "px";
+    menu.style.top = event.clientY + "px";
+
+    // Edit sound (opens Foundry native sound config)
+    this._addMenuItem(menu, "fa-edit", i18n.t("editSound"), () => {
+      const playlist = this._getPlaylist();
+      const sound = playlist?.sounds.get(soundId);
+      if (sound) sound.sheet.render(true);
+    });
+
+    // Change image
+    this._addMenuItem(menu, "fa-image", i18n.t("changeImage"), () => {
+      this._pickSlotImage(soundId);
+    });
+
+    // Remove image (if has one)
+    if (this._getSlotImage(soundId)) {
+      this._addMenuItem(menu, "fa-times", i18n.t("removeImage"), () => {
+        this._removeSlotImage(soundId);
+        this.render();
+      });
+    }
+
+    this._addMenuSeparator(menu);
+
+    // Remove sound
+    this._addMenuItem(menu, "fa-trash", i18n.t("removeSound"), () => {
+      this._removeSound(soundId);
+    }, true);
+
+    document.body.appendChild(menu);
+    this._contextMenu = menu;
+    this._adjustContextMenuPosition(menu);
+  }
+
+  // =============================================
+  // CONTEXT MENU HELPERS
+  // =============================================
+  _addMenuItem(menu, icon, label, callback, danger = false) {
+    const item = document.createElement("div");
+    item.className = "mp-context-menu-item" + (danger ? " danger" : "");
+    item.innerHTML = (icon ? `<i class="fas ${icon}"></i> ` : "") + label;
+    item.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this._closeContextMenu();
+      callback();
+    });
+    menu.appendChild(item);
+  }
+
+  _addMenuSeparator(menu) {
+    const sep = document.createElement("div");
+    sep.style.cssText = "height:1px;background:#444;margin:4px 0";
+    menu.appendChild(sep);
+  }
+
+  _adjustContextMenuPosition(menu) {
+    const rect = menu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) menu.style.left = (window.innerWidth - rect.width - 10) + "px";
+    if (rect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - rect.height - 10) + "px";
+  }
+
+  _closeContextMenu() {
+    if (this._contextMenu) {
+      this._contextMenu.remove();
+      this._contextMenu = null;
+    }
+  }
+
+  _pickSlotImage(soundId) {
+    new FilePicker({
+      type: "image",
+      current: this._getSlotImage(soundId) || "",
+      callback: (path) => { this._setSlotImage(soundId, path); this.render(); }
+    }).browse();
+  }
+
+  // =============================================
+  // PLAYLIST MANAGEMENT
+  // =============================================
+  _onPlaylistSelect(playlistId) {
+    if (this.currentPlaylist === playlistId) return;
+    this.currentPlaylist = playlistId;
+    this.focusedSoundId = null;
+    this.render();
+  }
+
+  async _onCreatePlaylist() {
+    const name = await PlaylistNameDialog.prompt(i18n.t("newPlaylist"));
+    if (!name) return;
+
+    const playlist = await Playlist.create({
+      name, sounds: [], mode: CONST.PLAYLIST_MODES.SIMULTANEOUS,
+      flags: { "sounds-player": { category: "music" } }
+    });
+
+    this.currentPlaylist = playlist.id;
+    this.focusedSoundId = null;
+    this.render();
+    ui.notifications.info(`${i18n.t("playlistCreated")}: ${name}`);
   }
 
   async _editPlaylist(playlistId) {
@@ -593,32 +855,27 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
   async _importFolderToPlaylist(playlistId) {
     const playlist = game.playlists.get(playlistId);
     if (!playlist) return;
-    
+
     const fp = new FilePicker({
       type: "folder",
       callback: async (folderPath) => {
         if (!folderPath) return;
         const result = await FilePicker.browse("data", folderPath);
         const audioFiles = result.files.filter(f => /\.(mp3|ogg|wav|webm|m4a|flac)$/i.test(f));
-        
+
         if (audioFiles.length === 0) {
           ui.notifications.warn("No audio files found");
           return;
         }
-        
+
         const soundsData = audioFiles.map(f => ({
-          name: f.split("/").pop().replace(/\.[^/.]+$/, ""),
+          name: cleanSoundName(f),
           path: f,
           volume: 0.5
         }));
-        
+
         await playlist.createEmbeddedDocuments("PlaylistSound", soundsData);
         ui.notifications.info(`${audioFiles.length} ${i18n.t("importedSounds")}`);
-        
-        // Reload if this is current playlist
-        if (this.currentPlaylist === playlistId) {
-          this._loadPlaylist(playlistId);
-        }
         this.render();
       }
     });
@@ -628,312 +885,124 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
   async _deletePlaylist(playlistId) {
     const playlist = game.playlists.get(playlistId);
     if (!playlist) return;
-    
+
     const confirmed = await foundry.applications.api.DialogV2.confirm({
       window: { title: i18n.t("deletePlaylist") },
       content: `<p>${i18n.t("confirmDelete")}</p><p><strong>${playlist.name}</strong></p>`,
       yes: { label: i18n.t("deletePlaylist"), icon: "fas fa-trash" },
       no: { label: i18n.t("cancel"), icon: "fas fa-times" }
     });
-    
+
     if (!confirmed) return;
-    
-    // Stop and clear state
-    const state = this.playlistStates[playlistId];
-    if (state) {
-      state.players.forEach(p => p?.stop());
-      delete this.playlistStates[playlistId];
+
+    // Stop all playing sounds first
+    for (const sound of playlist.sounds) {
+      if (sound.playing) {
+        try { await sound.update({ playing: false }); } catch { /* ignore */ }
+      }
     }
+
+    // Clean up images
     delete this._allPlaylistImages[playlistId];
     this._saveAllPlaylistImages();
-    
+
     await playlist.delete();
-    
+
     if (this.currentPlaylist === playlistId) {
       this.currentPlaylist = "";
+      this.focusedSoundId = null;
     }
-    
+
     this.render();
-    ui.notifications.info(`${i18n.t("playlistDeleted")}: ${playlist.name}`);
+    ui.notifications.info(i18n.t("playlistDeleted"));
   }
 
   // =============================================
-  // SLOT CONTEXT MENU
+  // SOUND MANAGEMENT
   // =============================================
-  _showSlotContextMenu(event, slotIndex) {
-    this._closeContextMenu();
-    
-    const menu = document.createElement("div");
-    menu.className = "mp-context-menu";
-    menu.style.left = event.clientX + "px";
-    menu.style.top = event.clientY + "px";
-    
-    // Change image
-    const changeImageItem = document.createElement("div");
-    changeImageItem.className = "mp-context-menu-item";
-    changeImageItem.innerHTML = `<i class="fas fa-image"></i> ${i18n.t("changeImage")}`;
-    changeImageItem.addEventListener("click", (e) => {
-      e.stopPropagation();
-      this._closeContextMenu();
-      this._pickSlotImage(slotIndex);
-    });
-    menu.appendChild(changeImageItem);
-    
-    if (this.slotImages[slotIndex]) {
-      const removeImageItem = document.createElement("div");
-      removeImageItem.className = "mp-context-menu-item";
-      removeImageItem.innerHTML = `<i class="fas fa-times"></i> ${i18n.t("removeImage")}`;
-      removeImageItem.addEventListener("click", (e) => {
-        e.stopPropagation();
-        this._closeContextMenu();
-        this._removeSlotImage(slotIndex);
-        this.render();
-      });
-      menu.appendChild(removeImageItem);
-    }
-    
-    const sep = document.createElement("div");
-    sep.style.cssText = "height:1px;background:#444;margin:4px 0";
-    menu.appendChild(sep);
-    
-    const removeItem = document.createElement("div");
-    removeItem.className = "mp-context-menu-item danger";
-    removeItem.innerHTML = `<i class="fas fa-trash"></i> ${i18n.t("removeSound")}`;
-    removeItem.addEventListener("click", (e) => {
-      e.stopPropagation();
-      this._closeContextMenu();
-      this._removeSlot(slotIndex);
-    });
-    menu.appendChild(removeItem);
-    
-    document.body.appendChild(menu);
-    this._contextMenu = menu;
-    this._adjustContextMenuPosition(menu);
-  }
-
-  _adjustContextMenuPosition(menu) {
-    const rect = menu.getBoundingClientRect();
-    if (rect.right > window.innerWidth) menu.style.left = (window.innerWidth - rect.width - 10) + "px";
-    if (rect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - rect.height - 10) + "px";
-  }
-  
-  _closeContextMenu() {
-    if (this._contextMenu) {
-      this._contextMenu.remove();
-      this._contextMenu = null;
-    }
-  }
-  
-  _pickSlotImage(slotIndex) {
-    new FilePicker({
-      type: "image",
-      current: this.slotImages[slotIndex] || "",
-      callback: (path) => { this._setSlotImage(slotIndex, path); this.render(); }
-    }).browse();
-  }
-
-  // =============================================
-  // PLAYLIST MANAGEMENT
-  // =============================================
-  _onPlaylistSelect(playlistId) {
-    if (this.currentPlaylist === playlistId) return;
-    this.currentPlaylist = playlistId;
-    this._loadPlaylist(playlistId);
-    this.render();
-  }
-
-  _loadPlaylist(playlistId) {
-    const playlist = game.playlists.get(playlistId);
-    if (!playlist) return;
-    
-    const state = this._getPlaylistState(playlistId);
-    
-    // Only reload if empty (preserve playing state)
-    if (state.slots.length === 0) {
-      state.slots = [];
-      state.players = [];
-      
-      for (const sound of playlist.sounds) {
-        const player = new CustomAudioPlayer();
-        const idx = state.slots.length;
-        player.onEnded = () => this._onTrackEnded(idx);
-        state.players.push(player);
-        
-        state.slots.push({
-          id: sound.id, name: sound.name, path: sound.path,
-          playlistId: playlist.id, playlistName: playlist.name, playlistSound: sound
-        });
-        
-        player.load(sound.path).catch(e => console.error(e));
-      }
-      
-      state.activeSlot = null;
-    }
-  }
-
-  async _onCreatePlaylist() {
-    const name = await PlaylistNameDialog.prompt(i18n.t("newPlaylist"));
-    if (!name) return;
-    
-    const playlist = await Playlist.create({
-      name, sounds: [], mode: CONST.PLAYLIST_MODES.SEQUENTIAL
-    });
-    
-    this.currentPlaylist = playlist.id;
-    this._getPlaylistState(playlist.id); // Init empty state
-    
-    this.render();
-    ui.notifications.info(`${i18n.t("playlistCreated")}: ${name}`);
-  }
-
-  // =============================================
-  // AUTO-SAVE
-  // =============================================
-  async _autoSavePlaylist() {
-    if (!this.currentPlaylist || this._saving) return;
-    
-    const playlist = game.playlists.get(this.currentPlaylist);
-    if (!playlist) return;
-    
-    this._saving = true;
-    
-    try {
-      const currentSoundIds = playlist.sounds.map(s => s.id);
-      const newSoundsData = this.slots.filter(s => s && s.path).map(s => ({ name: s.name, path: s.path, volume: 0.5 }));
-      
-      if (currentSoundIds.length > 0) {
-        await playlist.deleteEmbeddedDocuments("PlaylistSound", currentSoundIds);
-      }
-      
-      if (newSoundsData.length > 0) {
-        const created = await playlist.createEmbeddedDocuments("PlaylistSound", newSoundsData);
-        created.forEach((sound, i) => {
-          if (this.slots[i]) {
-            this.slots[i].id = sound.id;
-            this.slots[i].playlistSound = sound;
-          }
-        });
-      }
-    } catch (e) {
-      console.error("Sounds Player | Auto-save error:", e);
-    }
-    
-    this._saving = false;
-  }
-
-  // =============================================
-  // SLOT OPERATIONS
-  // =============================================
-  async _reorderSlots(fromIndex, toIndex) {
-    const [movedSlot] = this.slots.splice(fromIndex, 1);
-    this.slots.splice(toIndex, 0, movedSlot);
-    
-    const [movedPlayer] = this.players.splice(fromIndex, 1);
-    this.players.splice(toIndex, 0, movedPlayer);
-    
-    this.players.forEach((p, i) => { if (p) p.onEnded = () => this._onTrackEnded(i); });
-    
-    // Reindex images
-    const oldImages = { ...this.slotImages };
-    const newImages = {};
-    this.slots.forEach((_, newIdx) => {
-      let oldIdx;
-      if (newIdx === toIndex) oldIdx = fromIndex;
-      else if (fromIndex < toIndex) oldIdx = (newIdx >= fromIndex && newIdx < toIndex) ? newIdx + 1 : newIdx;
-      else oldIdx = (newIdx > toIndex && newIdx <= fromIndex) ? newIdx - 1 : newIdx;
-      if (oldImages[oldIdx]) newImages[newIdx] = oldImages[oldIdx];
-    });
-    this.slotImages = newImages;
-    
-    if (this.activeSlot === fromIndex) this.activeSlot = toIndex;
-    else if (fromIndex < toIndex && this.activeSlot > fromIndex && this.activeSlot <= toIndex) this.activeSlot--;
-    else if (fromIndex > toIndex && this.activeSlot >= toIndex && this.activeSlot < fromIndex) this.activeSlot++;
-    
-    await this._autoSavePlaylist();
-    this.render();
-  }
-
-  async _removeSlot(index) {
-    this.players[index]?.stop();
-    this.slots.splice(index, 1);
-    this.players.splice(index, 1);
-    
-    this.players.forEach((p, i) => { if (p) p.onEnded = () => this._onTrackEnded(i); });
-    
-    const oldImages = { ...this.slotImages };
-    const newImages = {};
-    Object.keys(oldImages).forEach(key => {
-      const i = parseInt(key);
-      if (i < index) newImages[i] = oldImages[i];
-      else if (i > index) newImages[i - 1] = oldImages[i];
-    });
-    this.slotImages = newImages;
-    
-    if (this.activeSlot === index) this.activeSlot = null;
-    else if (this.activeSlot > index) this.activeSlot--;
-    
-    await this._autoSavePlaylist();
-    this.render();
-  }
-
-  _addSlot() {
+  async _addSound() {
     if (!this.currentPlaylist) {
-      ui.notifications.warn("Select a playlist first");
+      ui.notifications.warn(i18n.t("selectPlaylist"));
       return;
     }
-    
-    const newPlayer = new CustomAudioPlayer();
-    const newIndex = this.slots.length;
-    newPlayer.onEnded = () => this._onTrackEnded(newIndex);
-    
-    this.slots.push(null);
-    this.players.push(newPlayer);
-    this._openSoundPicker(newIndex);
-  }
 
-  _openSoundPicker(slotIndex) {
     new SoundPickerApp(async (soundData) => {
-      // Handle batch import
+      const playlist = this._getPlaylist();
+      if (!playlist) return;
+
       if (soundData.batchFiles) {
-        for (const filePath of soundData.batchFiles) {
-          const name = filePath.split("/").pop().replace(/\.[^/.]+$/, "");
-          const player = new CustomAudioPlayer();
-          const idx = this.slots.length;
-          player.onEnded = () => this._onTrackEnded(idx);
-          this.players.push(player);
-          this.slots.push({ id: null, name, path: filePath, playlistId: null, playlistName: "Local", playlistSound: null });
-          player.load(filePath).catch(e => console.error(e));
-        }
+        // Batch import
+        const soundsData = soundData.batchFiles.map(f => ({
+          name: cleanSoundName(f),
+          path: f,
+          volume: 0.5
+        }));
+        await playlist.createEmbeddedDocuments("PlaylistSound", soundsData);
         ui.notifications.info(`${soundData.batchFiles.length} ${i18n.t("importedSounds")}`);
-        await this._autoSavePlaylist();
-        this.render();
-        return;
+      } else {
+        // Single sound
+        const created = await playlist.createEmbeddedDocuments("PlaylistSound", [{
+          name: soundData.name,
+          path: soundData.path,
+          volume: 0.5
+        }]);
+        if (created.length > 0) {
+          this.focusedSoundId = created[0].id;
+        }
       }
-      
-      // Single file
-      while (this.slots.length <= slotIndex) {
-        this.slots.push(null);
-        const p = new CustomAudioPlayer();
-        p.onEnded = () => this._onTrackEnded(this.players.length);
-        this.players.push(p);
-      }
-      
-      this.slots[slotIndex] = soundData;
-      this.activeSlot = slotIndex;
-      
-      const player = this.players[slotIndex];
-      if (player && soundData.path) player.load(soundData.path).catch(e => console.error(e));
-      
-      await this._autoSavePlaylist();
       this.render();
     }).render(true);
   }
 
-  async _onExternalDrop(event, slotIndex) {
+  async _removeSound(soundId) {
+    const playlist = this._getPlaylist();
+    const sound = playlist?.sounds.get(soundId);
+    if (!sound) return;
+
+    // Stop if playing
+    if (sound.playing) {
+      try { await sound.update({ playing: false }); } catch { /* ignore */ }
+    }
+
+    // Remove image
+    this._removeSlotImage(soundId);
+
+    // Reset focus if this was focused
+    if (this.focusedSoundId === soundId) {
+      this.focusedSoundId = null;
+    }
+
+    await playlist.deleteEmbeddedDocuments("PlaylistSound", [soundId]);
+    this.render();
+  }
+
+  async _reorderSounds(fromIndex, toIndex) {
+    const sounds = this._getSounds();
+    if (fromIndex >= sounds.length || toIndex >= sounds.length) return;
+
+    // Build new order
+    const ordered = [...sounds];
+    const [moved] = ordered.splice(fromIndex, 1);
+    ordered.splice(toIndex, 0, moved);
+
+    // Update sort values
+    const updates = ordered.map((sound, i) => ({
+      _id: sound.id,
+      sort: (i + 1) * 100000
+    }));
+
+    const playlist = this._getPlaylist();
+    if (playlist) {
+      await playlist.updateEmbeddedDocuments("PlaylistSound", updates);
+    }
+    this.render();
+  }
+
+  async _onExternalDrop(event) {
     try {
       const data = JSON.parse(event.dataTransfer.getData("text/plain"));
       if (data.type !== "PlaylistSound") return;
-      
+
       let playlistId, soundId;
       if (data.uuid) {
         const parts = data.uuid.split(".");
@@ -943,119 +1012,142 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
         playlistId = data.playlistId || data.parentId;
         soundId = data.soundId || data.id;
       }
-      
-      const playlist = game.playlists.get(playlistId);
-      const sound = playlist?.sounds.get(soundId);
-      if (!sound) return;
-      
-      while (this.slots.length <= slotIndex) {
-        this.slots.push(null);
-        const p = new CustomAudioPlayer();
-        p.onEnded = () => this._onTrackEnded(this.players.length);
-        this.players.push(p);
+
+      const srcPlaylist = game.playlists.get(playlistId);
+      const srcSound = srcPlaylist?.sounds.get(soundId);
+      if (!srcSound) return;
+
+      // Add to current playlist
+      const destPlaylist = this._getPlaylist();
+      if (!destPlaylist) return;
+
+      const created = await destPlaylist.createEmbeddedDocuments("PlaylistSound", [{
+        name: srcSound.name,
+        path: srcSound.path,
+        volume: srcSound.volume ?? 0.5
+      }]);
+
+      if (created.length > 0) {
+        this.focusedSoundId = created[0].id;
       }
-      
-      this.slots[slotIndex] = {
-        id: sound.id, name: sound.name, path: sound.path,
-        playlistId: playlist.id, playlistName: playlist.name, playlistSound: sound
-      };
-      this.activeSlot = slotIndex;
-      
-      const player = this.players[slotIndex];
-      if (player && sound.path) player.load(sound.path).catch(e => console.error(e));
-      
-      await this._autoSavePlaylist();
       this.render();
-    } catch (e) { }
+    } catch { /* ignore non-parseable drops */ }
   }
 
   // =============================================
-  // PLAYBACK
+  // PLAYBACK CONTROLS (via Foundry native API)
   // =============================================
-  _onTrackEnded(slotIndex) {
-    if (this.activeSlot !== slotIndex) return;
-    const player = this.players[slotIndex];
-    if (player?.loop) return;
-    
-    let nextSlot = slotIndex + 1;
-    while (nextSlot < this.slots.length && !this.slots[nextSlot]) nextSlot++;
-    
-    if (nextSlot < this.slots.length && this.slots[nextSlot]) {
-      this.activeSlot = nextSlot;
-      const nextPlayer = this.players[nextSlot];
-      const nextSound = this.slots[nextSlot];
-      if (nextPlayer && nextSound?.path) {
-        nextPlayer.load(nextSound.path).then(() => nextPlayer.play()).catch(e => console.error(e));
-      }
-      this._updateUIOnly();
+  async _togglePlaySound(soundId) {
+    const playlist = this._getPlaylist();
+    const sound = playlist?.sounds.get(soundId);
+    if (!sound) return;
+
+    this.focusedSoundId = soundId;
+
+    if (sound.playing) {
+      // Pause: save current position
+      const currentTime = this._getCurrentTime(sound);
+      this._manualStops.add(soundId);
+      await sound.update({ playing: false, pausedTime: currentTime });
+    } else {
+      // Play: Foundry will resume from pausedTime
+      await sound.update({ playing: true });
     }
-  }
-
-  _getActivePlayer() {
-    if (this.activeSlot === null) return null;
-    return this.players[this.activeSlot];
-  }
-
-  _getActiveSound() {
-    if (this.activeSlot === null || !this.slots[this.activeSlot]) return null;
-    return this.slots[this.activeSlot];
-  }
-
-  _seekToPercent(percent) {
-    const player = this._getActivePlayer();
-    if (player) player.seekPercent(percent);
   }
 
   async _onPlayPause() {
-    const player = this._getActivePlayer();
-    const soundData = this._getActiveSound();
-    if (!player || !soundData) return;
+    if (!this.focusedSoundId) {
+      const sounds = this._getSounds();
+      if (sounds.length > 0) {
+        this.focusedSoundId = sounds[0].id;
+      } else return;
+    }
+    await this._togglePlaySound(this.focusedSoundId);
+  }
 
-    if (player.isPlaying) {
-      player.pause();
-    } else {
-      if (!player.currentPath && soundData.path) await player.load(soundData.path);
-      await player.play();
+  async _onStop() {
+    if (!this.focusedSoundId) return;
+    const playlist = this._getPlaylist();
+    const sound = playlist?.sounds.get(this.focusedSoundId);
+    if (!sound) return;
+
+    this._manualStops.add(this.focusedSoundId);
+
+    if (sound.playing) {
+      await sound.update({ playing: false, pausedTime: 0 });
     }
   }
 
-  _onStop() {
-    const player = this._getActivePlayer();
-    if (player) player.stop();
+  async _onToggleLoop() {
+    if (!this.focusedSoundId) return;
+    const playlist = this._getPlaylist();
+    const sound = playlist?.sounds.get(this.focusedSoundId);
+    if (!sound) return;
+
+    await sound.update({ repeat: !sound.repeat });
   }
 
-  _onToggleLoop() {
-    const player = this._getActivePlayer();
-    if (player) player.setLoop(!player.loop);
+  async _onVolumeChange(event) {
+    const baseVolume = parseFloat(event.target.value);
+    if (!this.focusedSoundId) return;
+
+    const playlist = this._getPlaylist();
+    const sound = playlist?.sounds.get(this.focusedSoundId);
+    if (!sound) return;
+
+    // Save base volume (user-intended individual volume)
+    this._setBaseVolume(this.focusedSoundId, baseVolume);
+
+    // Compute effective volume = base * playlist multiplier
+    const plVol = this._getPlaylistVolume(this.currentPlaylist);
+    const effectiveVol = Math.max(0, Math.min(1, baseVolume * plVol));
+
+    // Update Foundry document (syncs to all clients)
+    await sound.update({ volume: effectiveVol });
   }
 
   _onPrevTrack() {
-    if (this.activeSlot === null) return;
-    let prevSlot = this.activeSlot - 1;
-    while (prevSlot >= 0 && !this.slots[prevSlot]) prevSlot--;
-    if (prevSlot >= 0 && this.slots[prevSlot]) {
-      this.activeSlot = prevSlot;
-      this._updateUIOnly();
-    }
+    const sounds = this._getSounds();
+    if (sounds.length === 0) return;
+    const currentIdx = sounds.findIndex(s => s.id === this.focusedSoundId);
+    const prevIdx = currentIdx > 0 ? currentIdx - 1 : sounds.length - 1;
+    this.focusedSoundId = sounds[prevIdx].id;
+    this._updateUIOnly();
   }
 
   _onNextTrack() {
-    if (this.activeSlot === null) return;
-    let nextSlot = this.activeSlot + 1;
-    while (nextSlot < this.slots.length && !this.slots[nextSlot]) nextSlot++;
-    if (nextSlot < this.slots.length && this.slots[nextSlot]) {
-      this.activeSlot = nextSlot;
-      this._updateUIOnly();
+    const sounds = this._getSounds();
+    if (sounds.length === 0) return;
+    const currentIdx = sounds.findIndex(s => s.id === this.focusedSoundId);
+    const nextIdx = currentIdx < sounds.length - 1 ? currentIdx + 1 : 0;
+    this.focusedSoundId = sounds[nextIdx].id;
+    this._updateUIOnly();
+  }
+
+  // Auto-advance when a track ends naturally
+  _onSoundStopped(playlistSound) {
+    if (this._manualStops.has(playlistSound.id)) {
+      this._manualStops.delete(playlistSound.id);
+      return;
+    }
+    // Natural end: auto-advance if this was the focused sound
+    if (this.focusedSoundId !== playlistSound.id) return;
+    if (playlistSound.repeat) return;
+
+    const sounds = this._getSounds();
+    const currentIdx = sounds.findIndex(s => s.id === this.focusedSoundId);
+    if (currentIdx < 0) return;
+
+    const nextIdx = currentIdx + 1;
+    if (nextIdx < sounds.length) {
+      const nextSound = sounds[nextIdx];
+      this.focusedSoundId = nextSound.id;
+      nextSound.update({ playing: true }).catch(e => console.error(e));
     }
   }
 
-  _onVolumeChange(event) {
-    const player = this._getActivePlayer();
-    if (player) player.setVolume(parseFloat(event.target.value));
-  }
-
   // =============================================
-  // UI UPDATE
+  // UI UPDATE LOOP
   // =============================================
   _startUpdateLoop() {
     if (this._updateInterval) clearInterval(this._updateInterval);
@@ -1069,33 +1161,35 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const el = this.element;
     if (!el) return;
 
-    const anyPlaying = this.players.some(p => p?.isPlaying);
+    const sounds = this._getSounds();
+    const anyPlaying = sounds.some(s => s.playing);
 
+    // Header bars animation
     const headerBars = el.querySelector(".mp-header-bars");
     if (headerBars) headerBars.classList.toggle("playing", anyPlaying);
 
-    // Update playlist items playing state
+    // Playlist sidebar playing state
     el.querySelectorAll(".mp-playlist-item").forEach(item => {
       const playlistId = item.dataset.playlistId;
       item.classList.toggle("playing", this._isPlaylistPlaying(playlistId));
     });
 
-    this.slots.forEach((soundData, i) => {
-      const slotEl = el.querySelector(`.mp-slot[data-slot="${i}"]`);
-      if (!slotEl || slotEl.classList.contains("mp-slot-add")) return;
+    // Slots state
+    sounds.forEach((sound, i) => {
+      const slotEl = el.querySelector(`.mp-slot[data-sound-id="${sound.id}"]`);
+      if (!slotEl) return;
 
-      const player = this.players[i];
-      slotEl.classList.toggle("playing", player?.isPlaying || false);
-      slotEl.classList.toggle("has-sound", !!soundData);
-      slotEl.classList.toggle("active", this.activeSlot === i);
-      
+      slotEl.classList.toggle("playing", sound.playing);
+      slotEl.classList.toggle("active", this.focusedSoundId === sound.id);
+
       const nameEl = slotEl.querySelector(".mp-slot-name");
-      if (nameEl) nameEl.textContent = soundData?.name || i18n.t("empty");
-      
+      if (nameEl && nameEl.textContent !== sound.name) nameEl.textContent = sound.name;
+
+      // Image
+      const image = this._getSlotImage(sound.id);
       const iconEl = slotEl.querySelector(".mp-slot-icon");
       const imgEl = slotEl.querySelector(".mp-slot-image");
-      const image = this.slotImages[i];
-      
+
       if (image) {
         if (iconEl) iconEl.style.display = "none";
         if (imgEl) { imgEl.style.display = "block"; if (imgEl.src !== image) imgEl.src = image; }
@@ -1111,26 +1205,29 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
       }
     });
 
-    const soundData = this._getActiveSound();
-    const player = this._getActivePlayer();
+    // Player controls
+    const focusedSound = this._getFocusedSound();
     const btnPlay = el.querySelector(".mp-btn-play");
     const btnLoop = el.querySelector(".mp-btn-loop");
-    
+
     if (btnPlay) {
-      const isPlaying = player?.isPlaying || false;
+      const isPlaying = focusedSound?.playing || false;
       btnPlay.classList.toggle("playing", isPlaying);
       const icon = btnPlay.querySelector("i");
       if (icon) icon.className = isPlaying ? "fas fa-pause" : "fas fa-play";
     }
-    
-    if (btnLoop) btnLoop.classList.toggle("active", player?.loop || false);
 
-    const current = player?.currentTime || 0;
-    const duration = player?.duration || 0;
+    if (btnLoop) btnLoop.classList.toggle("active", focusedSound?.repeat || false);
+
+    // Timeline
+    const current = focusedSound ? this._getCurrentTime(focusedSound) : 0;
+    const duration = focusedSound ? this._getDuration(focusedSound) : 0;
     const percent = duration > 0 ? (current / duration) * 100 : 0;
 
-    const progress = el.querySelector(".mp-timeline-progress");
-    if (progress) progress.style.width = percent + "%";
+    if (!this._seeking) {
+      const progress = el.querySelector(".mp-timeline-progress");
+      if (progress) progress.style.width = percent + "%";
+    }
 
     const timeCurrent = el.querySelector(".mp-time-current");
     if (timeCurrent) timeCurrent.textContent = this._formatTime(current);
@@ -1138,16 +1235,18 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const timeTotal = el.querySelector(".mp-time-total");
     if (timeTotal) timeTotal.textContent = this._formatTime(duration);
 
+    // Volume slider - show base volume (not effective volume)
     const volumeSlider = el.querySelector(".mp-volume-slider");
-    if (volumeSlider && document.activeElement !== volumeSlider && player) {
-      volumeSlider.value = player.volume;
+    if (volumeSlider && document.activeElement !== volumeSlider && focusedSound) {
+      volumeSlider.value = this._getBaseVolume(focusedSound.id);
     }
 
+    // Title
     const title = el.querySelector(".mp-player-title");
     if (title) {
-      if (soundData) {
-        title.textContent = soundData.name;
-        title.title = `${soundData.playlistName} / ${soundData.name}`;
+      if (focusedSound) {
+        title.textContent = focusedSound.name;
+        title.title = focusedSound.name;
         title.classList.remove("mp-no-selection");
       } else {
         title.textContent = i18n.t("selectSlot");
@@ -1166,7 +1265,6 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
   async close(options) {
     if (this._updateInterval) clearInterval(this._updateInterval);
     this._closeContextMenu();
-    // Don't stop players on close - they keep playing
     return super.close(options);
   }
 }
@@ -1187,12 +1285,40 @@ Hooks.once("ready", () => {
   game.soundsPlayer = new SoundsPlayerApp();
 });
 
+// React to Foundry playlist/sound changes to keep UI in sync
+Hooks.on("updatePlaylistSound", (sound, changes) => {
+  if ("playing" in changes && changes.playing === false) {
+    game.soundsPlayer?._onSoundStopped(sound);
+  }
+  game.soundsPlayer?._updateUIOnly();
+});
+
+Hooks.on("createPlaylistSound", () => {
+  game.soundsPlayer?.render();
+});
+
+Hooks.on("deletePlaylistSound", () => {
+  game.soundsPlayer?.render();
+});
+
+Hooks.on("updatePlaylist", () => {
+  game.soundsPlayer?.render();
+});
+
+Hooks.on("createPlaylist", () => {
+  game.soundsPlayer?.render();
+});
+
+Hooks.on("deletePlaylist", () => {
+  game.soundsPlayer?.render();
+});
+
 Hooks.on("getSceneControlButtons", (controls) => {
   const soundsControl = controls.sounds || controls.find?.(c => c.name === "sounds");
   if (!soundsControl) return;
-  
+
   const tools = soundsControl.tools;
-  
+
   if (typeof tools === "object" && !Array.isArray(tools)) {
     tools.soundsPlayer = {
       name: "soundsPlayer",
