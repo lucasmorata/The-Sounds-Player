@@ -363,8 +363,13 @@ class SoundsPlayerApp extends HandlebarsApplicationMixin(ApplicationV2) {
     for (const sound of playlist.sounds) {
       if (sound.playing && sound.sound) {
         try {
-          sound.sound.volume = sound.volume * vol;
-        } catch { /* ignore */ }
+          const effectiveVol = sound.volume * vol;
+          // Foundry v13: use fade() for immediate volume change (0ms duration = instant)
+          sound.sound.fade(effectiveVol, { duration: 0 });
+        } catch {
+          // Fallback: try direct volume set
+          try { sound.sound.volume = sound.volume * vol; } catch {}
+        }
       }
     }
   }
